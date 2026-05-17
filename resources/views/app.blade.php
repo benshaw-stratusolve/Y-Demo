@@ -3,6 +3,7 @@
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="csrf-token" content="{{ csrf_token() }}">
 
         <link rel="icon" href="/favicon.ico" sizes="any">
         <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -16,6 +17,33 @@
         </x-inertia::head>
     </head>
     <body class="font-sans antialiased">
+        <div id="splash-screen">
+            <img src="/images/Y-dark-remove.png" alt="Y" />
+        </div>
+        <style>
+            #splash-screen {
+                position: fixed;
+                inset: 0;
+                z-index: 9999;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: #ffffff;
+                transition: opacity 0.5s ease;
+            }
+            .dark #splash-screen {
+                background: #000000;
+            }
+            #splash-screen img {
+                height: 60px;
+                width: 60px;
+                object-fit: contain;
+                filter: invert(1);
+            }
+            .dark #splash-screen img {
+                filter: invert(0);
+            }
+        </style>
         <x-inertia::app />
     </body>
 </html>
