@@ -16,11 +16,11 @@ test('chat endpoint validates message', function () {
         ->assertSessionHasErrors('message');
 });
 
-test('chat endpoint returns grok response', function () {
+test('chat endpoint returns gemini response', function () {
     Http::fake([
-        'api.x.ai/*' => Http::response([
-            'choices' => [
-                ['message' => ['content' => 'Hello from Grok!']],
+        'generativelanguage.googleapis.com/*' => Http::response([
+            'candidates' => [
+                ['content' => ['parts' => [['text' => 'Hello from Gemini!']]]],
             ],
         ], 200),
     ]);
@@ -33,19 +33,19 @@ test('chat endpoint returns grok response', function () {
             'history' => [],
         ]);
 
-    $response->assertOk()->assertJsonPath('message', 'Hello from Grok!');
+    $response->assertOk()->assertJsonPath('message', 'Hello from Gemini!');
 
     Http::assertSent(fn ($request) =>
-        str_contains($request->url(), 'api.x.ai') &&
-        $request['model'] === config('services.xai.model')
+        str_contains($request->url(), 'generativelanguage.googleapis.com') &&
+        str_contains($request->url(), config('services.gemini.model'))
     );
 });
 
-test('chat endpoint passes history to grok', function () {
+test('chat endpoint passes history to gemini', function () {
     Http::fake([
-        'api.x.ai/*' => Http::response([
-            'choices' => [
-                ['message' => ['content' => 'Got your history!']],
+        'generativelanguage.googleapis.com/*' => Http::response([
+            'candidates' => [
+                ['content' => ['parts' => [['text' => 'Got your history!']]]],
             ],
         ], 200),
     ]);
@@ -63,13 +63,38 @@ test('chat endpoint passes history to grok', function () {
         ->assertOk();
 
     Http::assertSent(fn ($request) =>
-        count($request['messages']) === 4 // system + 2 history + current user
+        count($request['contents']) === 3 // 2 history + current user
     );
 });
 
-test('chat endpoint returns error message when xai api fails', function () {
+test('chat endpoint maps assistant role to model for gemini', function () {
     Http::fake([
-        'api.x.ai/*' => Http::response([], 500),
+        'generativelanguage.googleapis.com/*' => Http::response([
+            'candidates' => [
+                ['content' => ['parts' => [['text' => 'OK!']]]],
+            ],
+        ], 200),
+    ]);
+
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->postJson(route('flock-ai.chat'), [
+            'message' => 'Hi',
+            'history' => [
+                ['role' => 'assistant', 'content' => 'Hello!'],
+            ],
+        ])
+        ->assertOk();
+
+    Http::assertSent(fn ($request) =>
+        $request['contents'][0]['role'] === 'model'
+    );
+});
+
+test('chat endpoint returns error message when gemini api fails', function () {
+    Http::fake([
+        'generativelanguage.googleapis.com/*' => Http::response([], 500),
     ]);
 
     $user = User::factory()->create();

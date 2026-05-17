@@ -35,9 +35,9 @@ return [
         ],
     ],
 
-    'xai' => [
-        'key' => env('XAI_API_KEY'),
-        'model' => env('XAI_MODEL', 'grok-3'),
+    'gemini' => [
+        'key' => env('GEMINI_API_KEY'),
+        'model' => env('GEMINI_MODEL', 'gemini-2.0-flash'),
     ],
 
 ];

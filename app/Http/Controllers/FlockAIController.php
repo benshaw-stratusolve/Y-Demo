@@ -26,18 +26,26 @@ class FlockAIController extends Controller
             'history.*.content' => ['required', 'string', 'max:2000'],
         ]);
 
-        $messages = [
-            ['role' => 'system', 'content' => self::SYSTEM_PROMPT],
-            ...$request->input('history', []),
-            ['role' => 'user', 'content' => $request->input('message')],
-        ];
+        $contents = collect($request->input('history', []))
+            ->map(fn (array $msg) => [
+                'role' => $msg['role'] === 'assistant' ? 'model' : 'user',
+                'parts' => [['text' => $msg['content']]],
+            ])
+            ->push([
+                'role' => 'user',
+                'parts' => [['text' => $request->input('message')]],
+            ])
+            ->values()
+            ->all();
 
-        $response = Http::withToken(config('services.xai.key'))
-            ->post('https://api.x.ai/v1/chat/completions', [
-                'model' => config('services.xai.model'),
-                'messages' => $messages,
-                'max_tokens' => 500,
-            ]);
+        $model = config('services.gemini.model');
+        $response = Http::post(
+            "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key=".config('services.gemini.key'),
+            [
+                'system_instruction' => ['parts' => [['text' => self::SYSTEM_PROMPT]]],
+                'contents' => $contents,
+            ]
+        );
 
         if ($response->failed()) {
             return response()->json(
@@ -47,7 +55,7 @@ class FlockAIController extends Controller
         }
 
         return response()->json([
-            'message' => $response->json('choices.0.message.content'),
+            'message' => $response->json('candidates.0.content.parts.0.text'),
         ]);
     }
 }
