@@ -7,6 +7,8 @@ use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use Inertia\Inertia;
+use Laravel\Fortify\Contracts\LoginResponse as LoginResponseContract;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -15,7 +17,23 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->instance(LoginResponseContract::class, new class implements LoginResponseContract
+        {
+            public function toResponse($request)
+            {
+                if ($request->wantsJson()) {
+                    return response()->json(['two_factor' => false]);
+                }
+
+                Inertia::flash('toast', [
+                    'type' => 'success',
+                    'title' => 'Welcome back, '.auth()->user()->name.'!',
+                    'description' => "You're now signed in to Y.",
+                ]);
+
+                return redirect()->intended(config('fortify.home'));
+            }
+        });
     }
 
     /**
@@ -37,14 +55,9 @@ class AppServiceProvider extends ServiceProvider
             app()->isProduction(),
         );
 
-        Password::defaults(fn (): ?Password => app()->isProduction()
-            ? Password::min(12)
-                ->mixedCase()
-                ->letters()
-                ->numbers()
-                ->symbols()
-                ->uncompromised()
-            : null,
+        Password::defaults(fn (): Password => Password::min(8)
+            ->numbers()
+            ->symbols()
         );
     }
 }
