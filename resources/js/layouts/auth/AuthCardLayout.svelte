@@ -1,15 +1,7 @@
 <script lang="ts">
-    import { Link } from '@inertiajs/svelte';
     import type { Snippet } from 'svelte';
-    import AppLogoIcon from '@/components/AppLogoIcon.svelte';
-    import {
-        Card,
-        CardContent,
-        CardDescription,
-        CardHeader,
-        CardTitle,
-    } from '@/components/ui/card';
-    import { home } from '@/routes';
+    import MagicCard from '@/components/magic-card/MagicCard.svelte';
+    import DashboardShell from '@/components/DashboardShell.svelte';
 
     let {
         title = '',
@@ -22,33 +14,28 @@
     } = $props();
 </script>
 
-<div
-    class="flex min-h-svh flex-col items-center justify-center gap-6 bg-muted p-6 md:p-10"
->
-    <div class="flex w-full max-w-md flex-col gap-6">
-        <Link
-            href={home()}
-            class="flex items-center gap-2 self-center font-medium"
-        >
-            <div class="flex h-9 w-9 items-center justify-center">
-                <AppLogoIcon
-                    class="size-9 fill-current text-black dark:text-white"
-                />
-            </div>
-        </Link>
+<div class="relative flex min-h-svh items-center justify-center bg-white dark:bg-black overflow-hidden">
+    <!-- Blurred dashboard background -->
+    <div class="absolute inset-0 z-0 overflow-hidden">
+        <DashboardShell />
+    </div>
+    <div class="absolute inset-0 z-0 bg-white/60 dark:bg-black/50 backdrop-blur-md"></div>
 
-        <div class="flex flex-col gap-6">
-            <Card class="rounded-xl">
-                <CardHeader class="px-10 pt-8 pb-0 text-center">
-                    <CardTitle class="text-xl">{title}</CardTitle>
-                    <CardDescription>
-                        {description}
-                    </CardDescription>
-                </CardHeader>
-                <CardContent class="px-10 py-8">
-                    {@render children?.()}
-                </CardContent>
-            </Card>
-        </div>
+    <div class="relative z-10 w-full max-w-xl p-6 md:p-10">
+        <MagicCard
+            class="rounded-xl"
+            gradientFrom="#2563eb"
+            gradientTo="#60a5fa"
+            gradientColor="#1a1a2e"
+            gradientOpacity={0.6}
+        >
+            <div class="px-14 pt-10 pb-0 text-center">
+                <h1 class="text-2xl font-semibold tracking-tight">{title}</h1>
+                <p class="text-sm text-muted-foreground mt-1">{description}</p>
+            </div>
+            <div class="px-14 py-10">
+                {@render children?.()}
+            </div>
+        </MagicCard>
     </div>
 </div>

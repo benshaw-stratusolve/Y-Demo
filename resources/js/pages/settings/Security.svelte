@@ -14,35 +14,15 @@
 <script lang="ts">
     import { Form } from '@inertiajs/svelte';
     import ShieldCheck from 'lucide-svelte/icons/shield-check';
-    import { onDestroy } from 'svelte';
     import SecurityController from '@/actions/App/Http/Controllers/Settings/SecurityController';
     import AppHead from '@/components/AppHead.svelte';
     import Heading from '@/components/Heading.svelte';
     import InputError from '@/components/InputError.svelte';
     import PasswordInput from '@/components/PasswordInput.svelte';
-    import TwoFactorRecoveryCodes from '@/components/TwoFactorRecoveryCodes.svelte';
-    import TwoFactorSetupModal from '@/components/TwoFactorSetupModal.svelte';
     import { Button } from '@/components/ui/button';
     import { Label } from '@/components/ui/label';
-    import { twoFactorAuthState } from '@/lib/twoFactorAuth.svelte';
-    import { disable, enable } from '@/routes/two-factor';
 
-    let {
-        canManageTwoFactor = false,
-        requiresConfirmation = false,
-        twoFactorEnabled = false,
-        passwordRules,
-    }: {
-        canManageTwoFactor?: boolean;
-        requiresConfirmation?: boolean;
-        twoFactorEnabled?: boolean;
-        passwordRules: string;
-    } = $props();
-
-    const twoFactorAuth = twoFactorAuthState();
-    let showSetupModal = $state(false);
-
-    onDestroy(() => twoFactorAuth.clearTwoFactorAuthData());
+    let { passwordRules }: { passwordRules: string } = $props();
 </script>
 
 <AppHead title="Security settings" />
@@ -114,72 +94,3 @@
         {/snippet}
     </Form>
 </div>
-
-{#if canManageTwoFactor}
-    <div class="space-y-6">
-        <Heading
-            variant="small"
-            title="Two-factor authentication"
-            description="Manage your two-factor authentication settings"
-        />
-
-        {#if !twoFactorEnabled}
-            <div class="flex flex-col items-start justify-start space-y-4">
-                <p class="text-muted-foreground text-sm">
-                    When you enable two-factor authentication, you will be
-                    prompted for a secure pin during login. This pin can be
-                    retrieved from a TOTP-supported application on your phone.
-                </p>
-
-                <div>
-                    {#if twoFactorAuth.hasSetupData()}
-                        <Button onclick={() => (showSetupModal = true)}>
-                            <ShieldCheck class="size-4" />Continue setup
-                        </Button>
-                    {:else}
-                        <Form
-                            {...enable.form()}
-                            onSuccess={() => (showSetupModal = true)}
-                        >
-                            {#snippet children({ processing })}
-                                <Button type="submit" disabled={processing}>
-                                    Enable 2FA
-                                </Button>
-                            {/snippet}
-                        </Form>
-                    {/if}
-                </div>
-            </div>
-        {:else}
-            <div class="flex flex-col items-start justify-start space-y-4">
-                <p class="text-muted-foreground text-sm">
-                    You will be prompted for a secure, random pin during login,
-                    which you can retrieve from the TOTP-supported application
-                    on your phone.
-                </p>
-
-                <div class="relative inline">
-                    <Form {...disable.form()}>
-                        {#snippet children({ processing })}
-                            <Button
-                                variant="destructive"
-                                type="submit"
-                                disabled={processing}
-                            >
-                                Disable 2FA
-                            </Button>
-                        {/snippet}
-                    </Form>
-                </div>
-
-                <TwoFactorRecoveryCodes />
-            </div>
-        {/if}
-
-        <TwoFactorSetupModal
-            bind:isOpen={showSetupModal}
-            {requiresConfirmation}
-            {twoFactorEnabled}
-        />
-    </div>
-{/if}

@@ -1,6 +1,6 @@
 import { router } from '@inertiajs/svelte';
-import { toast } from 'svelte-sonner';
 import type { FlashToast } from '@/types/ui';
+import { notifications } from '@/lib/notifications.svelte';
 
 export function initializeFlashToast(): void {
     router.on('flash', (event) => {
@@ -11,6 +11,22 @@ export function initializeFlashToast(): void {
             return;
         }
 
-        toast[data.type](data.message);
+        notifications.add({
+            type: data.type,
+            title: data.title ?? data.message ?? '',
+            description: data.description,
+        });
+    });
+
+    router.on('error', (event) => {
+        const errors = (event as CustomEvent).detail?.errors as Record<string, string> | undefined;
+        if (!errors) return;
+
+        const firstMessage = Object.values(errors)[0];
+        notifications.add({
+            type: 'error',
+            title: 'Something went wrong',
+            description: firstMessage,
+        });
     });
 }

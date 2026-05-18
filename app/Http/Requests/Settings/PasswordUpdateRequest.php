@@ -5,6 +5,7 @@ namespace App\Http\Requests\Settings;
 use App\Concerns\PasswordValidationRules;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Hash;
 
 class PasswordUpdateRequest extends FormRequest
 {
@@ -19,7 +20,14 @@ class PasswordUpdateRequest extends FormRequest
     {
         return [
             'current_password' => $this->currentPasswordRules(),
-            'password' => $this->passwordRules(),
+            'password' => [
+                ...$this->passwordRules(),
+                function (string $attribute, mixed $value, \Closure $fail) {
+                    if (Hash::check($value, $this->user()->password)) {
+                        $fail('Your new password must be different from your current password.');
+                    }
+                },
+            ],
         ];
     }
 }
