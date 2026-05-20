@@ -4,6 +4,8 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -14,9 +16,9 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Storage;
 
-#[Fillable(['name', 'email', 'password', 'avatar', 'username', 'bio', 'location', 'website'])]
+#[Fillable(['name', 'email', 'password', 'avatar', 'username', 'bio', 'location', 'website', 'profanity_strikes', 'banned_at', 'is_admin'])]
 #[Hidden(['password', 'remember_token'])]
-class User extends Authenticatable
+class User extends Authenticatable implements FilamentUser
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
@@ -35,11 +37,23 @@ class User extends Authenticatable
         );
     }
 
+    public function isBanned(): bool
+    {
+        return $this->banned_at !== null;
+    }
+
+    public function canAccessPanel(Panel $panel): bool
+    {
+        return $this->is_admin === true;
+    }
+
     protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'banned_at' => 'datetime',
+            'is_admin' => 'boolean',
         ];
     }
 
@@ -63,8 +77,18 @@ class User extends Authenticatable
         return $this->hasMany(Follow::class, 'following_id');
     }
 
-    public function conversations(): BelongsToMany
+    public function followedUsers(): BelongsToMany
     {
-        return $this->belongsToMany(Conversation::class)->withPivot('joined_at');
+        return $this->belongsToMany(User::class, 'follows', 'follower_id', 'following_id')->withTimestamps();
+    }
+
+    public function followerUsers(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'follows', 'following_id', 'follower_id')->withTimestamps();
+    }
+
+    public function likedPosts(): BelongsToMany
+    {
+        return $this->belongsToMany(Post::class, 'likes', 'user_id', 'post_id')->withTimestamps();
     }
 }
