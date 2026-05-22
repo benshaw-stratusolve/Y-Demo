@@ -26,3 +26,11 @@ test('admin can delete a post', function () {
 
     expect(Post::find($post->id))->toBeNull();
 });
+
+test('non-admin cannot access admin posts', function () {
+    $user = User::factory()->create(['is_admin' => false]);
+
+    $this->actingAs($user)
+        ->get('/admin/posts')
+        ->assertForbidden();
+});

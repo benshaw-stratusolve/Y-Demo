@@ -30,6 +30,15 @@
 
     const displayUrl = $derived(previewUrl ?? avatarUrl ?? null);
 
+    const avatarColors = [
+        'bg-red-400', 'bg-orange-400', 'bg-amber-400', 'bg-green-400',
+        'bg-teal-400', 'bg-cyan-400', 'bg-blue-400', 'bg-indigo-400',
+        'bg-violet-400', 'bg-purple-400', 'bg-pink-400', 'bg-rose-400',
+    ];
+    const avatarBg = $derived(
+        avatarColors[userName.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % avatarColors.length]
+    );
+
     function handleFileChange(e: Event) {
         const file = (e.target as HTMLInputElement).files?.[0];
         if (!file) { return; }
@@ -79,11 +88,11 @@
 <div class="flex items-center gap-6">
     <!-- Avatar circle -->
     <div class="relative shrink-0">
-        <div class="w-20 h-20 rounded-full overflow-hidden bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center">
+        <div class="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center {displayUrl ? '' : avatarBg}">
             {#if displayUrl}
                 <img src={displayUrl} alt={userName} class="w-full h-full object-cover" />
             {:else}
-                <span class="text-xl font-bold text-neutral-500 dark:text-neutral-300">{initials}</span>
+                <span class="text-xl font-bold text-white">{initials}</span>
             {/if}
         </div>
         <!-- Camera badge -->

@@ -35,8 +35,7 @@ test('chat endpoint returns gemini response', function () {
 
     $response->assertOk()->assertJsonPath('message', 'Hello from Gemini!');
 
-    Http::assertSent(fn ($request) =>
-        str_contains($request->url(), 'generativelanguage.googleapis.com') &&
+    Http::assertSent(fn ($request) => str_contains($request->url(), 'generativelanguage.googleapis.com') &&
         str_contains($request->url(), config('services.gemini.model'))
     );
 });
@@ -62,8 +61,7 @@ test('chat endpoint passes history to gemini', function () {
         ])
         ->assertOk();
 
-    Http::assertSent(fn ($request) =>
-        count($request['contents']) === 3 // 2 history + current user
+    Http::assertSent(fn ($request) => count($request['contents']) === 3 // 2 history + current user
     );
 });
 
@@ -87,8 +85,7 @@ test('chat endpoint maps assistant role to model for gemini', function () {
         ])
         ->assertOk();
 
-    Http::assertSent(fn ($request) =>
-        $request['contents'][0]['role'] === 'model'
+    Http::assertSent(fn ($request) => $request['contents'][0]['role'] === 'model'
     );
 });
 

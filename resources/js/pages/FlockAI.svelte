@@ -1,7 +1,8 @@
 <script lang="ts">
     import { onMount, tick } from 'svelte';
+    import { page } from '@inertiajs/svelte';
     import { fade, fly } from 'svelte/transition';
-    import { Home, Bell, Mail, Sparkles, User, Send, ChevronDown } from 'lucide-svelte';
+    import { Home, Bell, Sparkles, User, Send, ChevronDown } from 'lucide-svelte';
     import AnimatedGradientText from '@/components/AnimatedGradientText.svelte';
     import AnimatedThemeToggler from '@/components/animated-theme-toggler/AnimatedThemeToggler.svelte';
     import AnimatedGridPattern from '@/components/animated-grid-pattern/AnimatedGridPattern.svelte';
@@ -14,6 +15,8 @@
         role: 'user' | 'assistant';
         content: string;
     };
+
+    const unreadCount = $derived((page.props as any).unread_notifications_count as number ?? 0);
 
     let ready = $state(false);
     let isDark = $state(false);
@@ -97,7 +100,6 @@
     const navItems = [
         { label: 'Home', icon: Home, href: '/dashboard' },
         { label: 'Notifications', icon: Bell, href: '/notifications' },
-        { label: 'Messages', icon: Mail, href: '/messages' },
         { label: 'Flok', icon: Sparkles, href: '/flock-ai' },
         { label: 'Profile', icon: User, href: '/settings/profile' },
     ];
@@ -216,6 +218,14 @@
                             </svg>
                             <Icon class="w-6 h-6 shrink-0" style="stroke: url(#flok-grad-fai)" />
                             <AnimatedGradientText class="text-xl font-semibold hidden xl:inline">Flok AI</AnimatedGradientText>
+                        {:else if item.label === 'Notifications'}
+                            <div class="relative">
+                                <Icon class="w-6 h-6 shrink-0" />
+                                {#if unreadCount > 0}
+                                    <span class="absolute -top-1 -right-1 min-w-[16px] h-4 bg-blue-500 rounded-full text-white text-[9px] font-bold flex items-center justify-center px-0.5">{unreadCount > 99 ? '99+' : unreadCount}</span>
+                                {/if}
+                            </div>
+                            <span class="text-xl hidden xl:block">{item.label}</span>
                         {:else}
                             <Icon class="w-6 h-6 shrink-0" />
                             <span class="text-xl hidden xl:block">{item.label}</span>

@@ -4,9 +4,10 @@ namespace App\Notifications;
 
 use App\Models\User;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 
-class LikeNotification extends Notification
+class LikeNotification extends Notification implements ShouldQueue
 {
     use Queueable;
 

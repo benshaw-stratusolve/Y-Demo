@@ -1,49 +1,184 @@
 <script lang="ts">
-    import { page, router } from '@inertiajs/svelte';
+    import { Deferred, page, router } from '@inertiajs/svelte';
     import AppHead from '@/components/AppHead.svelte';
     import { destroy as logout } from '@/actions/Laravel/Fortify/Http/Controllers/AuthenticatedSessionController';
+    import { destroy as destroyPost, like as likePost, reply as replyToPost, show as showPost, store as storePost } from '@/actions/App/Http/Controllers/PostController';
     import AnimatedThemeToggler from '@/components/animated-theme-toggler/AnimatedThemeToggler.svelte';
-    import { Home, Search, Bell, Mail, Sparkles, User, Feather } from 'lucide-svelte';
+    import { Home, Search, Bell, Sparkles, User, Feather, ImagePlus, X, Shield } from 'lucide-svelte';
     import SearchOverlay from '@/components/search-overlay/SearchOverlay.svelte';
     import AnimatedNotificationList from '@/components/animated-notification/AnimatedNotificationList.svelte';
     import AnimatedGradientText from '@/components/AnimatedGradientText.svelte';
+    import UserAvatar from '@/components/UserAvatar.svelte';
+    import { Badge } from '@/components/ui/badge';
+    import CoolMode from '@/components/magic/cool-mode/cool-mode.svelte';
+    import { notifications } from '@/lib/notifications.svelte';
+    import BanModal from '@/components/BanModal.svelte';
+    import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationPrevious, PaginationNext, PaginationEllipsis } from '@/components/ui/pagination';
 
     let searchOpen = $state(false);
+    let openCommentId = $state<number | null>(null);
+    let writingReplyId = $state<number | null>(null);
+    let postModalOpen = $state(false);
+    let postBody = $state('');
+    let postImage = $state<File | null>(null);
+    let postImagePreview = $state<string | null>(null);
+    let postError = $state<string | null>(null);
+    let replyTexts = $state<Record<number, string>>({});
 
-    let activeTab = $state('forYou');
+    const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+    function selectImage(e: Event) {
+        const file = (e.target as HTMLInputElement).files?.[0] ?? null;
+        if (postImagePreview) {
+            URL.revokeObjectURL(postImagePreview);
+        }
+        if (file && file.size > MAX_IMAGE_BYTES) {
+            postError = 'Image must be 5 MB or smaller.';
+            postImage = null;
+            postImagePreview = null;
+            (e.target as HTMLInputElement).value = '';
+            return;
+        }
+        postError = null;
+        postImage = file;
+        postImagePreview = file ? URL.createObjectURL(file) : null;
+    }
+
+    function clearImage() {
+        if (postImagePreview) {
+            URL.revokeObjectURL(postImagePreview);
+        }
+        postImage = null;
+        postImagePreview = null;
+    }
 
     const tabs = [
         { id: 'forYou', label: 'For you' },
         { id: 'following', label: 'Following' },
     ];
 
-    const posts = [
-        {
-            id: 1,
-            author: 'Luke',
-            handle: '@lukeshaw',
-            time: '2h',
-            content: 'Just deployed the new landing page. Really loving the pure OLED black aesthetic and mesh gradients!',
-            likes: 142,
-            reposts: 12,
-            replies: 5,
-        },
-        {
-            id: 2,
-            author: 'AI Engineering Daily',
-            handle: '@ai_eng',
-            time: '5h',
-            content: 'The future of frontend iteration is autonomous agents. Speed and architecture are scaling rapidly.',
-            likes: 890,
-            reposts: 145,
-            replies: 34,
-        },
-    ];
+    let { posts, trending, topAccounts = [], following, isDiscoveryFeed = false, activeTab = 'forYou' }: {
+        posts: { data: any[]; current_page: number; last_page: number; total: number; per_page: number };
+        trending: any[];
+        topAccounts: { id: number; name: string; username: string; avatar_url: string | null; is_following: boolean }[];
+        following: any[];
+        isDiscoveryFeed: boolean;
+        activeTab: string;
+    } = $props();
+
+    function switchTab(tab: string) {
+        router.get('/dashboard', { tab }, { preserveScroll: true, replace: true, only: ['activeTab'] });
+    }
+
+    const FOLLOWING_PER_PAGE = 10;
+    let followingPage = $state(1);
+    const followingVisible = $derived(
+        following.slice((followingPage - 1) * FOLLOWING_PER_PAGE, followingPage * FOLLOWING_PER_PAGE)
+    );
 
     const auth = $derived(page.props.auth as any);
+    const unreadCount = $derived((page.props as any).unread_notifications_count as number ?? 0);
+
+    function submitPost() {
+        if (!postBody.trim() && !postImage) { return; }
+        postError = null;
+        const data = new FormData();
+        if (postBody.trim()) { data.append('body', postBody); }
+        if (postImage) { data.append('image', postImage); }
+        router.post(storePost().url, data, {
+            preserveScroll: true,
+            onSuccess: () => {
+                postBody = ''; postModalOpen = false;
+                clearImage();
+                notifications.add({ type: 'success', title: 'Posted!', description: 'Your post has been uploaded!' });
+            },
+            onError: (errors) => { postError = errors.body ?? errors.image ?? null; },
+        });
+    }
+
+    function toggleLike(post: any) {
+        const liked = localLikes[post.id]?.liked ?? post.liked_by_user;
+        const count = localLikes[post.id]?.count ?? post.likes_count;
+        localLikes[post.id] = { liked: !liked, count: count + (liked ? -1 : 1) };
+        router.post(likePost(post.id).url, {}, {
+            preserveScroll: true,
+            preserveState: true,
+            onError: () => { delete localLikes[post.id]; },
+        });
+    }
+
+    let localLikes = $state<Record<number, { liked: boolean; count: number }>>({});
+    let localFollowing = $state<Record<number, boolean>>({});
+
+    function toggleFollow(userId: number, currentlyFollowing: boolean) {
+        localFollowing[userId] = !currentlyFollowing;
+        router.post(`/users/${userId}/follow`, {}, {
+            preserveScroll: true,
+            preserveState: true,
+            onError: () => { delete localFollowing[userId]; },
+        });
+    }
+
+    let openMenuId = $state<number | null>(null);
+
+    function deletePost(post: any) {
+        openMenuId = null;
+        router.delete(destroyPost(post.id).url, { preserveScroll: true });
+    }
+
+    function deleteReply(reply: any) {
+        openMenuId = null;
+        router.delete(destroyPost(reply.id).url, {
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => {
+                notifications.add({ type: 'info', title: 'Comment deleted', description: 'Your comment has been removed.' });
+            },
+        });
+    }
+
+    function submitReply(post: any) {
+        const body = replyTexts[post.id] ?? '';
+        if (!body.trim()) { return; }
+        router.post(replyToPost(post.id).url, { body }, {
+            preserveScroll: true,
+            onSuccess: () => {
+                replyTexts[post.id] = '';
+                writingReplyId = null;
+                notifications.add({ type: 'success', title: 'Comment posted!', description: 'Your comment has been added.' });
+            },
+            onError: (errors: Record<string, string>) => {
+                if (errors.body) {
+                    notifications.add({ type: 'error', title: 'Error', description: errors.body });
+                }
+            },
+        });
+    }
+
+    function isInteractiveClick(event: MouseEvent | KeyboardEvent): boolean {
+        return event.target instanceof Element && Boolean(event.target.closest('a, button, input, textarea, select, [role="button"]'));
+    }
+
+    function visitPost(event: MouseEvent, post: any) {
+        if (isInteractiveClick(event)) {
+            return;
+        }
+
+        router.visit(showPost(post.id).url);
+    }
+
+    function visitPostFromKeyboard(event: KeyboardEvent, post: any) {
+        if (isInteractiveClick(event) || (event.key !== 'Enter' && event.key !== ' ')) {
+            return;
+        }
+
+        event.preventDefault();
+        router.visit(showPost(post.id).url);
+    }
 </script>
 
 <AppHead title="Home" />
+<BanModal />
 
 <div class="min-h-screen bg-white dark:bg-black text-gray-900 dark:text-gray-100 flex justify-center font-sans">
 
@@ -61,9 +196,8 @@
                 {#each [
                     { label: 'Home', icon: Home, href: '/dashboard' },
                     { label: 'Notifications', icon: Bell, href: '/notifications' },
-                    { label: 'Messages', icon: Mail, href: '/messages' },
                     { label: 'Flok', icon: Sparkles, href: '/flock-ai' },
-                    { label: 'Profile', icon: User, href: '/settings/profile' },
+                    { label: 'Profile', icon: User, href: `/users/${auth?.user?.id}` },
                 ] as item}
                     {@const Icon = item.icon}
                     <a href={item.href} class="flex items-center gap-5 p-3 rounded-full w-fit transition-colors text-gray-500 dark:text-neutral-300 hover:text-gray-900 hover:bg-neutral-100 dark:hover:text-white dark:hover:bg-neutral-900">
@@ -77,6 +211,13 @@
                                 </defs>
                             </svg>
                             <Icon class="w-6 h-6" style="stroke: url(#flok-icon-grad)" />
+                        {:else if item.label === 'Notifications'}
+                            <div class="relative">
+                                <Icon class="w-6 h-6" />
+                                {#if unreadCount > 0}
+                                    <span class="absolute -top-1 -right-1 min-w-[16px] h-4 bg-blue-500 rounded-full text-white text-[9px] font-bold flex items-center justify-center px-0.5">{unreadCount > 99 ? '99+' : unreadCount}</span>
+                                {/if}
+                            </div>
                         {:else}
                             <Icon class="w-6 h-6" />
                         {/if}
@@ -94,35 +235,44 @@
                     <Search class="w-6 h-6" />
                     <span class="text-xl hidden xl:block">Explore</span>
                 </button>
+                {#if auth?.user?.is_admin}
+                    <a
+                        href="/admin"
+                        class="flex items-center gap-5 p-3 rounded-full w-fit transition-colors text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+                    >
+                        <Shield class="w-6 h-6" />
+                        <span class="text-xl hidden xl:block font-semibold">Admin Panel</span>
+                    </a>
+                {/if}
             </nav>
 
-            <button class="bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-full py-3.5 px-8 w-[90%] mt-4 transition-colors hidden xl:block shadow-md">
+            <button onclick={() => postModalOpen = true} class="bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-full py-3.5 px-8 w-[90%] mt-4 transition-colors hidden xl:block shadow-md">
                 Post
             </button>
-            <button class="bg-blue-500 hover:bg-blue-600 text-white rounded-full p-3 mt-4 transition-colors xl:hidden shadow-md" aria-label="Post">
+            <button onclick={() => postModalOpen = true} class="bg-blue-500 hover:bg-blue-600 text-white rounded-full p-3 mt-4 transition-colors xl:hidden shadow-md" aria-label="Post">
                 <Feather class="w-6 h-6" />
             </button>
         </div>
 
-        <button
-            onclick={() => router.post(logout().url)}
-            class="flex items-center gap-3 p-3 rounded-full w-full transition-colors mb-4 text-gray-500 dark:text-neutral-400 hover:text-gray-900 hover:bg-neutral-100 dark:hover:text-white dark:hover:bg-neutral-900"
-        >
-            <div class="w-10 h-10 rounded-full shrink-0 overflow-hidden bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center">
-                {#if auth?.user?.avatar_url}
-                    <img src={auth.user.avatar_url} alt={auth.user.name} class="w-full h-full object-cover" />
-                {:else}
-                    <span class="text-xs font-bold text-neutral-500 dark:text-neutral-300">
-                        {auth?.user?.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) ?? '?'}
-                    </span>
-                {/if}
-            </div>
-            <div class="flex-col items-start hidden xl:flex">
-                <span class="font-bold text-sm">{auth?.user?.name ?? 'User'}</span>
-                <span class="text-neutral-500 text-sm">@{auth?.user?.name?.toLowerCase().replace(' ', '') ?? 'username'}</span>
-            </div>
-            <div class="ml-auto hidden xl:block text-neutral-500 text-xs">Log out</div>
-        </button>
+        <div class="flex items-center gap-1 mb-4 w-full">
+            <a
+                href="/users/{auth?.user?.id}"
+                class="flex items-center gap-3 p-3 rounded-full flex-1 min-w-0 transition-colors text-gray-500 dark:text-neutral-400 hover:text-gray-900 hover:bg-neutral-100 dark:hover:text-white dark:hover:bg-neutral-900"
+            >
+                <UserAvatar user={auth?.user} />
+                <div class="flex-col items-start hidden xl:flex min-w-0">
+                    <span class="font-bold text-sm truncate">{auth?.user?.name ?? 'User'}</span>
+                    <span class="text-neutral-500 text-sm">@{auth?.user?.username ?? 'username'}</span>
+                </div>
+            </a>
+            <button
+                onclick={() => router.post(logout().url)}
+                class="hidden xl:flex ml-auto shrink-0 group"
+                aria-label="Log out"
+            >
+                <Badge variant="destructive" class="group-hover:font-bold">Log out</Badge>
+            </button>
+        </div>
     </header>
 
     <!-- Main feed -->
@@ -134,7 +284,7 @@
                 {#each tabs as tab}
                     <button
                         class="flex-1 pb-3 transition-colors relative flex justify-center font-bold text-[15px] {activeTab !== tab.id ? 'text-neutral-500 hover:text-gray-900 dark:hover:text-white' : ''}"
-                        onclick={() => activeTab = tab.id}
+                        onclick={() => switchTab(tab.id)}
                     >
                         {tab.label}
                         {#if activeTab === tab.id}
@@ -145,111 +295,430 @@
             </div>
         </div>
 
+        {#if activeTab === 'following'}
+            {#if following.length === 0}
+                <div class="flex flex-col items-center justify-center py-20 px-8 text-center">
+                    <div class="text-5xl mb-4">🤔</div>
+                    <h2 class="font-extrabold text-xl mb-2">Hmmm, nothing to find here.</h2>
+                    <p class="text-neutral-500 text-[15px] mb-1">Y's it so empty?</p>
+                    <p class="text-neutral-400 text-[13px]">Start following people and their posts will show up here.</p>
+                </div>
+            {/if}
+            {#each followingVisible as account}
+                {@const isFollowing = localFollowing[account.id] ?? account.is_following}
+                <div class="flex items-center gap-3 p-4 border-b border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-950 transition-colors">
+                    <a href="/users/{account.id}" class="flex items-center gap-3 flex-1 min-w-0">
+                        <UserAvatar user={account} />
+                        <div class="min-w-0">
+                            <p class="font-bold truncate">{account.name}</p>
+                            <p class="text-neutral-500 text-sm">@{account.username}</p>
+                        </div>
+                    </a>
+                    <button
+                        onclick={() => toggleFollow(account.id, isFollowing)}
+                        class="shrink-0 rounded-full px-4 py-1.5 text-[13px] font-bold transition-colors {isFollowing ? 'border border-neutral-300 dark:border-neutral-700 hover:border-red-300 hover:text-red-500' : 'bg-gray-900 dark:bg-white text-white dark:text-black hover:bg-gray-700 dark:hover:bg-neutral-200'}"
+                    >
+                        {isFollowing ? 'Following' : 'Follow'}
+                    </button>
+                </div>
+            {/each}
+            {#if following.length > FOLLOWING_PER_PAGE}
+                <div class="py-4 border-b border-neutral-200 dark:border-neutral-800">
+                    <Pagination count={following.length} perPage={FOLLOWING_PER_PAGE} bind:page={followingPage}>
+                        {#snippet children({ pages, currentPage: cp })}
+                            <PaginationContent>
+                                <PaginationItem><PaginationPrevious /></PaginationItem>
+                                {#each pages as pg (pg.key)}
+                                    {#if pg.type === 'ellipsis'}
+                                        <PaginationItem><PaginationEllipsis /></PaginationItem>
+                                    {:else}
+                                        <PaginationItem><PaginationLink page={pg} isActive={cp === pg.value} /></PaginationItem>
+                                    {/if}
+                                {/each}
+                                <PaginationItem><PaginationNext /></PaginationItem>
+                            </PaginationContent>
+                        {/snippet}
+                    </Pagination>
+                </div>
+            {/if}
+        {:else}
+
         <!-- Composer -->
         <div class="px-4 py-4 border-b border-neutral-200 dark:border-neutral-800 gap-4 hidden sm:flex">
-            <div class="w-10 h-10 bg-neutral-200 dark:bg-neutral-800 rounded-full shrink-0"></div>
+            <UserAvatar user={auth?.user} />
             <div class="flex-1 flex flex-col">
-                <input
-                    type="text"
+                <textarea
+                    bind:value={postBody}
                     placeholder="What is happening?!"
-                    class="bg-transparent text-xl placeholder-neutral-400 dark:placeholder-neutral-500 outline-none py-2 pb-6 border-b border-neutral-200 dark:border-neutral-800 focus:border-neutral-400 dark:focus:border-neutral-700 w-full"
-                />
-                <div class="flex justify-between items-center pt-3">
-                    <div class="flex gap-1 text-blue-500">
-                        {#each Array(5) as _}
-                            <button class="p-2 hover:bg-blue-500/10 rounded-full transition-colors" aria-label="Attach">
-                                <div class="w-5 h-5 border border-current rounded-sm"></div>
-                            </button>
-                        {/each}
+                    rows="2"
+                    class="bg-transparent text-xl placeholder-neutral-400 dark:placeholder-neutral-500 outline-none py-2 pb-2 w-full resize-none"
+                ></textarea>
+                {#if postError}
+                    <p class="text-red-500 text-sm mt-1">{postError}</p>
+                {/if}
+                {#if postImagePreview}
+                    <div class="relative mt-2 rounded-2xl overflow-hidden border border-neutral-200 dark:border-neutral-800 shadow-sm w-fit">
+                        <img src={postImagePreview} alt="Preview" class="max-h-48 rounded-2xl object-cover" />
+                        <button onclick={clearImage} class="absolute top-2 right-2 bg-black/60 text-white rounded-full p-1 hover:bg-black/80 transition-colors">
+                            <X class="w-3 h-3" />
+                        </button>
                     </div>
-                    <button class="bg-blue-500 text-white font-bold rounded-full py-1.5 px-4 opacity-50 cursor-not-allowed text-sm">
-                        Post
-                    </button>
+                {/if}
+                <div class="flex items-center justify-end gap-3 mt-3">
+                    <label class="cursor-pointer text-blue-500 hover:text-blue-400 transition-colors p-1.5 rounded-full hover:bg-blue-500/10">
+                        <ImagePlus class="w-5 h-5" />
+                        <input type="file" accept="image/*" class="hidden" onchange={selectImage} />
+                    </label>
+                    <CoolMode>
+                        <button
+                            onclick={submitPost}
+                            disabled={!postBody.trim() && !postImage}
+                            class="bg-blue-500 text-white font-bold rounded-full py-1.5 px-4 text-sm transition-colors hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Post
+                        </button>
+                    </CoolMode>
                 </div>
             </div>
         </div>
 
         <!-- Posts -->
         <div>
-            {#each posts as post}
-                <article class="p-4 border-b border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-950/50 transition-colors cursor-pointer flex gap-3">
-                    <div class="w-10 h-10 bg-neutral-200 dark:bg-neutral-800 rounded-full shrink-0 mt-1"></div>
+            {#if isDiscoveryFeed}
+                <div class="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800 bg-blue-50/50 dark:bg-blue-950/20">
+                    <p class="text-[13px] font-semibold text-blue-500">✦ Discover Y</p>
+                    <p class="text-neutral-500 text-[13px] mt-0.5">Follow people to personalise your feed. Here's what's happening right now.</p>
+                </div>
+            {/if}
+            {#each posts.data as post}
+                <div
+                    role="link"
+                    tabindex="0"
+                    onclick={(event) => visitPost(event, post)}
+                    onkeydown={(event) => visitPostFromKeyboard(event, post)}
+                    class="p-4 border-b border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-950/50 transition-colors cursor-pointer flex gap-3"
+                >
+                    <UserAvatar user={post.user} class="mt-1" />
                     <div class="flex flex-col w-full">
-                        <div class="flex items-center justify-between">
+                        <div class="flex items-center justify-between w-full">
                             <div class="flex items-center gap-1 text-[15px]">
-                                <span class="font-bold hover:underline">{post.author}</span>
-                                <span class="text-neutral-500">{post.handle} · {post.time}</span>
+                                <span class="font-bold hover:underline">{post.user.name}</span>
+                                <span class="text-neutral-500">@{post.user.username} · {new Date(post.created_at).toLocaleDateString()}</span>
                             </div>
-                            <button class="text-neutral-500 hover:bg-blue-500/10 hover:text-blue-500 rounded-full px-2 py-0.5 transition-colors">···</button>
+                            {#if post.user.id === auth?.user?.id}
+                                <div class="relative">
+                                    <button
+                                        type="button"
+                                        onclick={(e) => { e.stopPropagation(); openMenuId = openMenuId === post.id ? null : post.id; }}
+                                        class="p-1 rounded-full text-neutral-400 hover:text-blue-500 hover:bg-blue-500/10 transition-colors text-lg leading-none"
+                                    >···</button>
+                                    {#if openMenuId === post.id}
+                                        <button type="button" class="fixed inset-0 z-10 cursor-default" aria-label="Close menu" onclick={() => openMenuId = null}></button>
+                                        <div class="absolute right-0 top-7 z-20 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-xl shadow-lg overflow-hidden w-36">
+                                            <button
+                                                type="button"
+                                                onclick={() => deletePost(post)}
+                                                class="w-full text-left px-4 py-3 text-red-500 font-bold text-[14px] hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                                            >
+                                                Delete post
+                                            </button>
+                                        </div>
+                                    {/if}
+                                </div>
+                            {/if}
                         </div>
-                        <p class="mt-0.5 text-[15px] leading-normal">{post.content}</p>
-                        <div class="flex justify-between text-neutral-500 mt-3 max-w-md text-[13px]">
-                            <button class="flex items-center gap-2 hover:text-blue-500 transition-colors group">
-                                <div class="p-2 group-hover:bg-blue-500/10 rounded-full -m-2 mr-0">💬</div>
-                                {post.replies}
-                            </button>
-                            <button class="flex items-center gap-2 hover:text-green-500 transition-colors group">
-                                <div class="p-2 group-hover:bg-green-500/10 rounded-full -m-2 mr-0">🔁</div>
-                                {post.reposts}
-                            </button>
-                            <button class="flex items-center gap-2 hover:text-pink-500 transition-colors group">
-                                <div class="p-2 group-hover:bg-pink-500/10 rounded-full -m-2 mr-0">❤️</div>
-                                {post.likes}
-                            </button>
-                            <button class="flex items-center gap-2 hover:text-blue-500 transition-colors group">
-                                <div class="p-2 group-hover:bg-blue-500/10 rounded-full -m-2 mr-0">📊</div>
-                                {Math.floor(post.likes * 12.5)}
-                            </button>
-                            <div class="flex gap-2">
-                                <button class="p-2 hover:bg-blue-500/10 hover:text-blue-500 rounded-full -m-2 transition-colors">🔖</button>
-                                <button class="p-2 hover:bg-blue-500/10 hover:text-blue-500 rounded-full -m-2 transition-colors">📤</button>
+                        {#if post.image_url}
+                            <div class="mt-3 rounded-2xl overflow-hidden border border-neutral-200 dark:border-neutral-800 bg-neutral-950 shadow-sm flex items-center justify-center">
+                                <img src={post.image_url} alt="Post image" class="max-h-[500px] w-full object-contain" loading="lazy" />
                             </div>
+                        {/if}
+                        {#if post.body}<p class="mt-2 text-[15px] leading-normal">{post.body}</p>{/if}
+                        <div class="flex gap-6 text-neutral-500 mt-3 text-[13px]">
+                            <button
+                                type="button"
+                                class="flex items-center gap-2 transition-colors group hover:text-blue-500"
+                                onclick={() => openCommentId = openCommentId === post.id ? null : post.id}
+                            >
+                                <div class="p-2 group-hover:bg-blue-500/10 rounded-full -m-2 mr-0">💬</div>
+                                {post.replies_count ?? 0}
+                            </button>
+                            <button
+                                type="button"
+                                class="flex items-center gap-2 transition-colors group hover:text-pink-500 {(localLikes[post.id]?.liked ?? post.liked_by_user) ? 'text-pink-500' : ''}"
+                                onclick={() => toggleLike(post)}
+                            >
+                                <div class="p-2 group-hover:bg-pink-500/10 rounded-full -m-2 mr-0">{(localLikes[post.id]?.liked ?? post.liked_by_user) ? '❤️' : '🤍'}</div>
+                                {localLikes[post.id]?.count ?? post.likes_count ?? 0}
+                            </button>
                         </div>
                     </div>
-                </article>
+                </div>
+                {#if openCommentId === post.id}
+                    <div class="border-b border-neutral-200 dark:border-neutral-800">
+                        <!-- Existing replies -->
+                        {#each post.replies ?? [] as reply}
+                            <div class="relative px-4 py-3 flex gap-3 border-t border-neutral-100 dark:border-neutral-900">
+                                <UserAvatar user={reply.user} size="xs" />
+                                <div class="min-w-0 flex-1 pr-10">
+                                    <div class="flex items-center gap-1 text-[13px]">
+                                        <span class="font-bold">{reply.user.name}</span>
+                                        <span class="text-neutral-500">@{reply.user.username} · {new Date(reply.created_at).toLocaleDateString()}</span>
+                                    </div>
+                                    <p class="text-[14px] leading-normal mt-0.5">{reply.body}</p>
+                                </div>
+                                {#if reply.user.id === auth?.user?.id}
+                                    <div class="absolute top-2 right-3">
+                                        <button
+                                            type="button"
+                                            onclick={() => openMenuId = openMenuId === reply.id ? null : reply.id}
+                                            class="p-1 rounded-full text-neutral-400 hover:text-blue-500 hover:bg-blue-500/10 transition-colors text-lg leading-none"
+                                        >···</button>
+                                        {#if openMenuId === reply.id}
+                                            <button type="button" class="fixed inset-0 z-10 cursor-default" aria-label="Close menu" onclick={() => openMenuId = null}></button>
+                                            <div class="absolute right-0 top-7 z-20 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-xl shadow-lg overflow-hidden w-40">
+                                                <button
+                                                    type="button"
+                                                    onclick={() => deleteReply(reply)}
+                                                    class="w-full text-left px-4 py-3 text-red-500 font-bold text-[14px] hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                                                >
+                                                    Delete comment
+                                                </button>
+                                            </div>
+                                        {/if}
+                                    </div>
+                                {/if}
+                            </div>
+                        {/each}
+
+                        <!-- Write reply -->
+                        {#if writingReplyId === post.id}
+                            <div class="px-4 pt-3 pb-4 border-t border-neutral-100 dark:border-neutral-900">
+                                <textarea
+                                    bind:value={replyTexts[post.id]}
+                                    rows="3"
+                                    placeholder="Post your comment"
+                                    class="w-full bg-transparent border border-neutral-200 dark:border-neutral-700 rounded-xl px-4 py-3 text-[15px] placeholder-neutral-400 outline-none focus:border-blue-500 resize-none transition-colors"
+                                ></textarea>
+                                <div class="flex justify-end mt-2">
+                                    <button
+                                        onclick={() => submitReply(post)}
+                                        disabled={!(replyTexts[post.id] ?? '').trim()}
+                                        class="bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-full py-1.5 px-4 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Comment
+                                    </button>
+                                </div>
+                            </div>
+                        {:else}
+                            <div class="px-4 py-3 border-t border-neutral-100 dark:border-neutral-900">
+                                <button
+                                    onclick={() => writingReplyId = post.id}
+                                    class="text-blue-500 hover:text-blue-400 text-[14px] font-semibold transition-colors"
+                                >
+                                    + Comment
+                                </button>
+                            </div>
+                        {/if}
+                    </div>
+                {/if}
             {/each}
         </div>
+        {#if posts.last_page > 1}
+            <div class="py-4 border-b border-neutral-200 dark:border-neutral-800">
+                <Pagination count={posts.total} perPage={posts.per_page} page={posts.current_page} onPageChange={(p) => router.get('/dashboard', { page: p }, { preserveScroll: true, replace: true })}>
+                    {#snippet children({ pages, currentPage: cp })}
+                        <PaginationContent>
+                            <PaginationItem><PaginationPrevious /></PaginationItem>
+                            {#each pages as pg (pg.key)}
+                                {#if pg.type === 'ellipsis'}
+                                    <PaginationItem><PaginationEllipsis /></PaginationItem>
+                                {:else}
+                                    <PaginationItem><PaginationLink page={pg} isActive={cp === pg.value} /></PaginationItem>
+                                {/if}
+                            {/each}
+                            <PaginationItem><PaginationNext /></PaginationItem>
+                        </PaginationContent>
+                    {/snippet}
+                </Pagination>
+            </div>
+        {/if}
+        {/if}
     </main>
 
     <!-- Right sidebar -->
     <aside class="w-[350px] pl-8 py-2 hidden lg:block">
         <div class="sticky top-0 z-10 bg-white dark:bg-black pt-1 pb-2">
-            <div class="bg-neutral-100 dark:bg-neutral-900 rounded-full flex items-center px-4 py-2.5 border border-transparent focus-within:border-blue-500 focus-within:bg-white dark:focus-within:bg-black transition-colors">
+            <button
+                onclick={() => searchOpen = true}
+                class="w-full bg-neutral-100 dark:bg-neutral-900 hover:bg-neutral-200 dark:hover:bg-neutral-800 rounded-full flex items-center px-4 py-2.5 transition-colors text-left"
+            >
                 <Search class="w-4 h-4 text-neutral-400 shrink-0" />
-                <input type="text" placeholder="Search" class="bg-transparent outline-none w-full ml-4 text-[15px] placeholder-neutral-400 dark:placeholder-neutral-500" />
-            </div>
-        </div>
-
-        <div class="bg-neutral-100 dark:bg-[#16181c] rounded-2xl p-4 mt-3 border border-neutral-200 dark:border-neutral-800">
-            <h2 class="font-extrabold mb-2">Subscribe to Premium</h2>
-            <p class="text-[15px] mb-3 leading-snug">Subscribe to unlock new features and if eligible, receive a share of ads revenue.</p>
-            <button class="bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-full py-2 px-4 transition-colors text-[15px]">
-                Subscribe
+                <span class="ml-4 text-[15px] text-neutral-400 dark:text-neutral-500">Search</span>
             </button>
         </div>
 
-        <div class="bg-neutral-100 dark:bg-[#16181c] rounded-2xl pt-4 mt-4 border border-neutral-200 dark:border-neutral-800">
-            <h2 class="font-extrabold text-xl px-4 mb-3">What's happening</h2>
-            {#each [1, 2, 3] as _}
-                <div class="px-4 py-3 hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer flex justify-between">
-                    <div>
-                        <div class="text-[13px] text-neutral-500">Technology · Trending</div>
-                        <div class="font-bold mt-0.5 text-[15px]">#SvelteKit</div>
-                        <div class="text-[13px] text-neutral-500 mt-1">24.5K posts</div>
-                    </div>
-                    <button class="text-neutral-500 hover:text-blue-500 transition-colors p-1 h-fit hover:bg-blue-500/10 rounded-full">···</button>
+        <Deferred data={['trending', 'topAccounts']}>
+            {#snippet fallback()}
+                <!-- Trending skeleton -->
+                <div class="bg-neutral-100 dark:bg-[#16181c] rounded-2xl pt-4 mt-4 border border-neutral-200 dark:border-neutral-800">
+                    <div class="h-7 w-36 bg-neutral-200 dark:bg-neutral-800 rounded-full mx-4 mb-3 animate-pulse"></div>
+                    {#each [1, 2, 3, 4, 5] as _}
+                        <div class="px-4 py-3 flex flex-col gap-1.5">
+                            <div class="h-3 w-20 bg-neutral-200 dark:bg-neutral-800 rounded-full animate-pulse"></div>
+                            <div class="h-4 w-full bg-neutral-200 dark:bg-neutral-800 rounded-full animate-pulse"></div>
+                            <div class="h-3 w-16 bg-neutral-200 dark:bg-neutral-800 rounded-full animate-pulse"></div>
+                        </div>
+                    {/each}
                 </div>
-            {/each}
-            <button class="p-4 text-blue-500 hover:bg-black/5 dark:hover:bg-white/5 w-full text-left rounded-b-2xl transition-colors text-[15px]">
-                Show more
-            </button>
-        </div>
+                <!-- Who to follow skeleton -->
+                <div class="bg-neutral-100 dark:bg-[#16181c] rounded-2xl pt-4 mt-4 border border-neutral-200 dark:border-neutral-800">
+                    <div class="h-7 w-28 bg-neutral-200 dark:bg-neutral-800 rounded-full mx-4 mb-3 animate-pulse"></div>
+                    {#each [1, 2, 3, 4, 5] as _}
+                        <div class="px-4 py-3 flex items-center justify-between gap-3">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-full bg-neutral-200 dark:bg-neutral-800 animate-pulse shrink-0"></div>
+                                <div class="flex flex-col gap-1.5">
+                                    <div class="h-3.5 w-24 bg-neutral-200 dark:bg-neutral-800 rounded-full animate-pulse"></div>
+                                    <div class="h-3 w-16 bg-neutral-200 dark:bg-neutral-800 rounded-full animate-pulse"></div>
+                                </div>
+                            </div>
+                            <div class="h-7 w-20 bg-neutral-200 dark:bg-neutral-800 rounded-full animate-pulse shrink-0"></div>
+                        </div>
+                    {/each}
+                </div>
+            {/snippet}
+
+            <div class="bg-neutral-100 dark:bg-[#16181c] rounded-2xl pt-4 mt-4 border border-neutral-200 dark:border-neutral-800">
+                <h2 class="font-extrabold text-xl px-4 mb-3">Trending on Y!</h2>
+                {#each trending as post}
+                    <a href="/posts/{post.id}" class="px-4 py-3 hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex justify-between gap-3">
+                        <div class="min-w-0">
+                            <div class="text-[13px] text-neutral-500">@{post.user.username}</div>
+                            <div class="font-bold mt-0.5 text-[15px] truncate">{post.body}</div>
+                            <div class="text-[13px] text-neutral-500 mt-1">{post.likes_count} likes</div>
+                        </div>
+                    </a>
+                {/each}
+            </div>
+
+            <div class="bg-neutral-100 dark:bg-[#16181c] rounded-2xl pt-4 mt-4 border border-neutral-200 dark:border-neutral-800">
+                <h2 class="font-extrabold text-xl px-4 mb-3">Who to follow</h2>
+                {#each topAccounts as account}
+                    <div class="px-4 py-3 hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex items-center justify-between gap-3">
+                        <a href="/users/{account.id}" class="flex items-center gap-3 min-w-0">
+                            <UserAvatar user={account} />
+                            <div class="min-w-0">
+                                <p class="font-bold text-[14px] truncate">{account.name}</p>
+                                <p class="text-neutral-500 text-[13px]">@{account.username}</p>
+                            </div>
+                        </a>
+                        <button
+                            onclick={() => router.post(`/users/${account.id}/follow`, {}, { preserveScroll: true })}
+                            class="shrink-0 rounded-full px-4 py-1.5 text-[13px] font-bold transition-colors {account.is_following ? 'border border-neutral-300 dark:border-neutral-700 hover:border-red-300 hover:text-red-500' : 'bg-gray-900 dark:bg-white text-white dark:text-black hover:bg-gray-700 dark:hover:bg-neutral-200'}"
+                        >
+                            {account.is_following ? 'Following' : 'Follow'}
+                        </button>
+                    </div>
+                {/each}
+            </div>
+        </Deferred>
     </aside>
 
 </div>
 
+{#if postModalOpen}
+    <!-- Backdrop — separate z-index so backdrop-filter blurs the page behind it -->
+    <button
+        class="fixed inset-0 z-40 w-full bg-black/60 backdrop-blur-md cursor-default"
+        aria-label="Close modal"
+        onclick={() => postModalOpen = false}
+    ></button>
+
+    <!-- Modal -->
+    <div
+        class="fixed inset-0 z-50 flex items-start justify-center pt-16 px-4 pointer-events-none"
+        role="dialog"
+        aria-modal="true"
+    >
+        <div class="pointer-events-auto w-full max-w-[600px] bg-white dark:bg-black rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-xl">
+            <div class="px-4 py-4 flex gap-4">
+                <UserAvatar user={auth?.user} />
+                <div class="flex-1 flex flex-col">
+                    <textarea
+                        bind:value={postBody}
+                        rows="4"
+                        placeholder="What is happening?!"
+                        class="bg-transparent text-xl placeholder-neutral-400 dark:placeholder-neutral-500 outline-none py-2 w-full resize-none"
+                    ></textarea>
+                    {#if postError}
+                        <p class="text-red-500 text-sm mt-1">{postError}</p>
+                    {/if}
+                    {#if postImagePreview}
+                        <div class="relative mt-2 rounded-2xl overflow-hidden border border-neutral-200 dark:border-neutral-800 shadow-sm w-fit">
+                            <img src={postImagePreview} alt="Preview" class="max-h-48 rounded-2xl object-cover" />
+                            <button onclick={clearImage} class="absolute top-2 right-2 bg-black/60 text-white rounded-full p-1 hover:bg-black/80 transition-colors">
+                                <X class="w-3 h-3" />
+                            </button>
+                        </div>
+                    {/if}
+                    <div class="flex items-center justify-end gap-3 mt-3">
+                        <label class="cursor-pointer text-blue-500 hover:text-blue-400 transition-colors p-1.5 rounded-full hover:bg-blue-500/10">
+                            <ImagePlus class="w-5 h-5" />
+                            <input type="file" accept="image/*" class="hidden" onchange={selectImage} />
+                        </label>
+                        <button
+                            onclick={submitPost}
+                            disabled={!postBody.trim() && !postImage}
+                            class="bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-full py-2 px-6 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Post
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{/if}
+
 <SearchOverlay bind:open={searchOpen} />
 <AnimatedNotificationList />
+
+{#if auth?.user?.banned_at}
+    <div class="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <!-- Blurred backdrop -->
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-md"></div>
+
+        <!-- Modal card -->
+        <div class="relative z-10 w-full max-w-md bg-white dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 rounded-3xl shadow-2xl p-8 text-center">
+
+            <!-- Y logo -->
+            <div class="flex items-center justify-center mb-6">
+                <div class="w-16 h-16 rounded-full bg-black dark:bg-white flex items-center justify-center shadow-lg">
+                    <img src="/images/Y-dark-remove.png" alt="Y" class="h-9 w-9 object-contain dark:invert invert-0" />
+                </div>
+            </div>
+
+            <h1 class="text-2xl font-extrabold mb-2 text-gray-900 dark:text-white">Account Permanently Banned</h1>
+
+            <p class="text-neutral-500 dark:text-neutral-400 text-[15px] leading-relaxed mb-2">
+                You've been removed from Y — and honestly? That's on you.
+            </p>
+            <p class="text-neutral-500 dark:text-neutral-400 text-[15px] leading-relaxed mb-2">
+                After three strikes of inappropriate language, your account has been permanently suspended. We take our community seriously, and that's exactly...
+            </p>
+            <p class="text-2xl font-black mb-6 text-gray-900 dark:text-white tracking-tight">
+                That's <span class="italic">Y</span>.
+            </p>
+
+            <button
+                onclick={() => router.post(logout().url)}
+                class="w-full bg-black dark:bg-white text-white dark:text-black font-bold rounded-full py-3.5 text-[15px] hover:bg-neutral-800 dark:hover:bg-neutral-200 transition-colors"
+            >
+                Noted
+            </button>
+        </div>
+    </div>
+{/if}
 
 <style>
     :global(::-webkit-scrollbar) { width: 8px; }

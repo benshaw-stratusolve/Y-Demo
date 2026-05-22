@@ -1,7 +1,6 @@
 <script lang="ts">
     import { fade } from 'svelte/transition';
     import { onMount } from 'svelte';
-
     import Backlight from '../components/backlight/Backlight.svelte';
     import FlickeringGrid from '@/components/FlickeringGrid/Flicker.svelte';
     import TypewriterEffect from '@/components/typewriter-effect/TypewriterEffect.svelte';
@@ -47,7 +46,7 @@
 
             <h1 class="text-5xl lg:text-[80px] font-extrabold mb-12 tracking-tight leading-tight">
                 <TypewriterEffect
-                    words={[{ text: 'Happening' }, { text: 'now' }]}
+                    words={[{ text: "What's" }, { text: 'your' }, { text: 'Y' }, { text: '?' }]}
                     speed={80}
                 />
             </h1>
@@ -69,12 +68,26 @@
                     By signing up, you agree to the Terms of Service and Privacy Policy, including Cookie Use.
                 </p>
 
-                <div class="mt-6">
-                    <h3 class="font-bold text-[17px] mb-4">Already have an account?</h3>
-                    <a href="/login" class="relative overflow-hidden bg-transparent border border-neutral-700 hover:bg-blue-500/10 text-blue-500 font-bold rounded-full py-2.5 px-4 transition-colors text-center">
+                <div class="mt-1">
+                    <h3 class="font-bold text-[19px] mb-5">Already have an account?</h3>
+                    <a href="/login" class="relative overflow-hidden bg-transparent border border-neutral-700 hover:bg-blue-500/10 text-blue-500 font-bold rounded-full py-2 px-4 transition-colors text-center">
                         Sign in
                     </a>
                 </div>
+
+                <a href="/admin" class="mt-3 group block w-full rounded-2xl border border-neutral-700/60 bg-neutral-900/60 backdrop-blur-sm p-4 hover:border-neutral-500 hover:bg-neutral-800/60 transition-all duration-200">
+                    <div class="flex items-center gap-2 mb-1.5">
+                        <span class="text-[10px] font-bold tracking-widest text-neutral-400 uppercase">Admin Portal</span>
+                        <span class="ml-auto text-[10px] font-semibold tracking-widest text-red-500/80 uppercase bg-red-500/10 border border-red-500/20 rounded px-1.5 py-0.5">Restricted</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <svg class="w-4 h-4 text-neutral-400 group-hover:text-neutral-200 transition-colors" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                            <span class="text-sm text-neutral-300 font-medium group-hover:text-white transition-colors">Sign in to admin</span>
+                        </div>
+                        <svg class="w-4 h-4 text-neutral-500 group-hover:text-neutral-300 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    </div>
+                </a>
             </div>
         </div>
     </div>

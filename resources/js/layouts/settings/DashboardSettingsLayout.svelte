@@ -5,23 +5,25 @@
     import AnimatedThemeToggler from '@/components/animated-theme-toggler/AnimatedThemeToggler.svelte';
     import SearchOverlay from '@/components/search-overlay/SearchOverlay.svelte';
     import AnimatedNotificationList from '@/components/animated-notification/AnimatedNotificationList.svelte';
-    import { Home, Search, Bell, Mail, Sparkles, User, Feather } from 'lucide-svelte';
+    import { Home, Search, Bell, Sparkles, User } from 'lucide-svelte';
     import AnimatedGradientText from '@/components/AnimatedGradientText.svelte';
     import { edit as editProfile } from '@/routes/profile';
     import { edit as editSecurity } from '@/routes/security';
+    import { Badge } from '@/components/ui/badge';
+    import UserAvatar from '@/components/UserAvatar.svelte';
 
     let { children }: { children?: Snippet } = $props();
 
     const auth = $derived(page.props.auth as any);
     const currentUrl = $derived(page.url);
+    const unreadCount = $derived((page.props as any).unread_notifications_count as number ?? 0);
 
     let searchOpen = $state(false);
 
     const navItems = [
         { label: 'Home', icon: Home, href: '/dashboard' },
         { label: 'Notifications', icon: Bell, href: '/notifications' },
-        { label: 'Messages', icon: Mail, href: '/messages' },
-        { label: 'Flok', icon: Sparkles, href: '#flok' },
+        { label: 'Flok', icon: Sparkles, href: '/flock-ai' },
         { label: 'Profile', icon: User, href: editProfile().url },
     ];
 
@@ -61,6 +63,13 @@
                                 </defs>
                             </svg>
                             <Icon class="w-6 h-6" style="stroke: url(#flok-icon-grad)" />
+                        {:else if item.label === 'Notifications'}
+                            <div class="relative">
+                                <Icon class="w-6 h-6" />
+                                {#if unreadCount > 0}
+                                    <span class="absolute -top-1 -right-1 min-w-[16px] h-4 bg-blue-500 rounded-full text-white text-[9px] font-bold flex items-center justify-center px-0.5">{unreadCount > 99 ? '99+' : unreadCount}</span>
+                                {/if}
+                            </div>
                         {:else}
                             <Icon class="w-6 h-6" />
                         {/if}
@@ -80,33 +89,27 @@
                 </button>
             </nav>
 
-            <button class="bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-full py-3.5 px-8 w-[90%] mt-4 transition-colors hidden xl:block shadow-md">
-                Post
-            </button>
-            <button class="bg-blue-500 hover:bg-blue-600 text-white rounded-full p-3 mt-4 transition-colors xl:hidden shadow-md" aria-label="Post">
-                <Feather class="w-6 h-6" />
-            </button>
         </div>
 
-        <button
-            onclick={() => router.post(logout().url)}
-            class="flex items-center gap-3 p-3 rounded-full w-full transition-colors mb-4 text-gray-500 dark:text-neutral-400 hover:text-gray-900 hover:bg-neutral-100 dark:hover:text-white dark:hover:bg-neutral-900"
-        >
-            <div class="w-10 h-10 rounded-full shrink-0 overflow-hidden bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center">
-                {#if auth?.user?.avatar_url}
-                    <img src={auth.user.avatar_url} alt={auth.user.name} class="w-full h-full object-cover" />
-                {:else}
-                    <span class="text-xs font-bold text-neutral-500 dark:text-neutral-300">
-                        {auth?.user?.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) ?? '?'}
-                    </span>
-                {/if}
-            </div>
-            <div class="flex-col items-start hidden xl:flex">
-                <span class="font-bold text-sm">{auth?.user?.name ?? 'User'}</span>
-                <span class="text-neutral-500 text-sm">@{auth?.user?.name?.toLowerCase().replace(' ', '') ?? 'username'}</span>
-            </div>
-            <div class="ml-auto hidden xl:block text-neutral-500 text-xs">Log out</div>
-        </button>
+        <div class="flex items-center gap-1 mb-4 w-full">
+            <a
+                href="/users/{auth?.user?.id}"
+                class="flex items-center gap-3 p-3 rounded-full flex-1 min-w-0 transition-colors text-gray-500 dark:text-neutral-400 hover:text-gray-900 hover:bg-neutral-100 dark:hover:text-white dark:hover:bg-neutral-900"
+            >
+                <UserAvatar user={auth?.user} />
+                <div class="flex-col items-start hidden xl:flex min-w-0">
+                    <span class="font-bold text-sm truncate">{auth?.user?.name ?? 'User'}</span>
+                    <span class="text-neutral-500 text-sm">@{auth?.user?.username ?? 'username'}</span>
+                </div>
+            </a>
+            <button
+                onclick={() => router.post(logout().url)}
+                class="hidden xl:flex ml-auto shrink-0 group"
+                aria-label="Log out"
+            >
+                <Badge variant="destructive" class="group-hover:font-bold">Log out</Badge>
+            </button>
+        </div>
     </header>
 
     <!-- Main content -->
@@ -115,7 +118,13 @@
         <!-- Settings header -->
         <div class="sticky top-0 bg-white/80 dark:bg-black/80 backdrop-blur-md z-10 border-b border-neutral-200 dark:border-neutral-800">
             <div class="px-4 pt-4 pb-0">
-                <h1 class="text-xl font-bold mb-3">Settings</h1>
+                <div class="flex items-center gap-3 mb-3">
+                    <a
+                        href="/users/{auth?.user?.id}"
+                        class="text-neutral-500 hover:text-gray-900 dark:hover:text-white transition-colors text-xl"
+                    >←</a>
+                    <h1 class="text-xl font-bold">Settings</h1>
+                </div>
                 <!-- Tab navigation -->
                 <div class="flex">
                     {#each settingsTabs as tab}

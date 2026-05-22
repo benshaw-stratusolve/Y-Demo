@@ -36,9 +36,13 @@ createInertiaApp({
             case name === 'Messages':
             case name === 'Notifications':
             case name === 'FlockAI':
+            case name === 'Error':
                 return null;
             case name.startsWith('auth/'):
                 return AuthLayout;
+            case name.startsWith('posts/'):
+            case name.startsWith('users/'):
+                return null;
             case name.startsWith('settings/'):
                 return DashboardSettingsLayout;
             default:

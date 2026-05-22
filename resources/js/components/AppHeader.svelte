@@ -8,12 +8,9 @@
     import AppLogo from '@/components/AppLogo.svelte';
     import AppLogoIcon from '@/components/AppLogoIcon.svelte';
     import Breadcrumbs from '@/components/Breadcrumbs.svelte';
-    import {
-        Avatar,
-        AvatarFallback,
-        AvatarImage,
-    } from '@/components/ui/avatar';
+    import UserAvatar from '@/components/UserAvatar.svelte';
     import { Button } from '@/components/ui/button';
+    import Shield from 'lucide-svelte/icons/shield';
     import {
         DropdownMenu,
         DropdownMenuContent,
@@ -40,7 +37,6 @@
     } from '@/components/ui/tooltip';
     import UserMenuContent from '@/components/UserMenuContent.svelte';
     import { currentUrlState } from '@/lib/currentUrl.svelte';
-    import { getInitials } from '@/lib/initials';
     import { toUrl } from '@/lib/utils';
     import { dashboard } from '@/routes';
     import type { BreadcrumbItem, NavItem } from '@/types';
@@ -57,13 +53,19 @@
     const activeItemStyles =
         'text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100';
 
-    const mainNavItems: NavItem[] = [
-        {
-            title: 'Dashboard',
-            href: dashboard(),
-            icon: LayoutGrid,
-        },
-    ];
+    const mainNavItems = $derived<NavItem[]>([
+    {
+        title: 'Dashboard',
+        href: dashboard(),
+        icon: LayoutGrid,
+    },
+    ...(auth.user?.is_admin ? [{
+        title: 'Admin',
+        href: '/admin',
+        icon: Shield,
+    }] : []),
+  ]);
+
 
     const rightNavItems: NavItem[] = [
         {
@@ -239,21 +241,7 @@
                                 aria-expanded={props['aria-expanded']}
                                 data-state={props['data-state']}
                             >
-                                <Avatar
-                                    class="size-8 overflow-hidden rounded-full"
-                                >
-                                    {#if auth.user?.avatar}
-                                        <AvatarImage
-                                            src={auth.user.avatar}
-                                            alt={auth.user?.name}
-                                        />
-                                    {/if}
-                                    <AvatarFallback
-                                        class="rounded-lg bg-neutral-200 font-semibold text-black dark:bg-neutral-700 dark:text-white"
-                                    >
-                                        {getInitials(auth.user?.name ?? '')}
-                                    </AvatarFallback>
-                                </Avatar>
+                                <UserAvatar user={auth.user} size="xs" />
                             </Button>
                         {/snippet}
                     </DropdownMenuTrigger>

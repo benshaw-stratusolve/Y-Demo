@@ -1,8 +1,10 @@
 <?php
 
 use App\Models\User;
+use App\Notifications\PasswordResetCompletedNotification;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Password;
 use Laravel\Fortify\Features;
 
 beforeEach(function () {
@@ -62,6 +64,32 @@ test('password can be reset with valid token', function () {
 
         return true;
     });
+});
+
+test('successful password reset is stored in notifications', function () {
+    $user = User::factory()->create();
+    $token = Password::broker()->createToken($user);
+
+    $response = $this->post(route('password.update'), [
+        'token' => $token,
+        'email' => $user->email,
+        'password' => 'P@ssword1',
+        'password_confirmation' => 'P@ssword1',
+    ]);
+
+    $response
+        ->assertSessionHasNoErrors()
+        ->assertRedirect(route('login'));
+
+    $notification = $user->notifications()
+        ->where('type', PasswordResetCompletedNotification::class)
+        ->first();
+
+    expect($notification)->not->toBeNull()
+        ->and($notification->data)->toMatchArray([
+            'type' => 'password_reset',
+            'message' => 'Your password was reset successfully.',
+        ]);
 });
 
 test('password cannot be reset with invalid token', function () {

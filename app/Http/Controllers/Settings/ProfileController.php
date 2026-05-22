@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers\Settings;
 
+use App\Concerns\HandlesProfanityStrikes;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\ProfileDeleteRequest;
 use App\Http\Requests\Settings\ProfileUpdateRequest;
+use App\Services\ProfanityService;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,6 +17,8 @@ use Inertia\Response;
 
 class ProfileController extends Controller
 {
+    use HandlesProfanityStrikes;
+
     /**
      * Show the user's profile settings page.
      */
@@ -29,8 +33,12 @@ class ProfileController extends Controller
     /**
      * Update the user's profile information.
      */
-    public function update(ProfileUpdateRequest $request): RedirectResponse
+    public function update(ProfileUpdateRequest $request, ProfanityService $profanity): RedirectResponse
     {
+        if ($request->filled('bio') && $profanity->contains($request->bio)) {
+            return $this->handleStrike($request->user(), 'Your bio contains inappropriate language.', 'bio');
+        }
+
         $request->user()->fill($request->validated());
 
         if ($request->user()->isDirty('email')) {

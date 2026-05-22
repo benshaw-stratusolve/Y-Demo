@@ -1,0 +1,220 @@
+{
+  "main": {
+    "id": "cf84247663d61be6",
+    "type": "split",
+    "children": [
+      {
+        "id": "d807a4bee047d01d",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "03cc7f224633ac69",
+            "type": "leaf",
+            "state": {
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "Graph view"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "06592c1831e7f60a",
+    "type": "split",
+    "children": [
+      {
+        "id": "67d93c9b671d1d00",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "7a7309920aed2e69",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "d1bc7f415740a562",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "563ee23d3bac8c84",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "32fc53e7639d6441",
+    "type": "split",
+    "children": [
+      {
+        "id": "b1ab0fd08a2440b9",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "258653ceab6a0785",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "Untitled.base",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for Untitled"
+            }
+          },
+          {
+            "id": "438d79c89411c57e",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "Untitled.base",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from Untitled"
+            }
+          },
+          {
+            "id": "d6b3a4de361b7a4d",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "d2558a5c6f053bad",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "e7e97ef037f7c71b",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "Untitled.base",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of Untitled"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "03cc7f224633ac69",
+  "lastOpenFiles": [
+    "02 - Architecture/Laravel + Inertia + Svelte.md",
+    "01 - Stack Overview/00 - Index.md",
+    "04 - Data Model/Posts (replies + reposts).md",
+    "04 - Data Model/Notifications.md",
+    "04 - Data Model/Likes.md",
+    "04 - Data Model/Follows.md",
+    "03 - Auth/Registration Flow.md",
+    "03 - Auth/Login + Custom Response.md",
+    "03 - Auth/Fortify Setup.md",
+    "03 - Auth/Email Verification.md",
+    "02 - Architecture/Shared Data (Inertia Middleware).md",
+    "02 - Architecture/Request Lifecycle.md",
+    "05 - Features/FlockAI Chat (Gemini).md",
+    "01 - Stack Overview/01 - Stack Overview.md",
+    "01 - Stack Overview",
+    "08 - Admin Panel (Filament)/Admin Overview.md",
+    "06 - Backend Concepts/Laravel Notifications.md",
+    "07 - Frontend Concepts/Prefetching + Polling.md",
+    "00 - Index.md",
+    "07 - Frontend Concepts/Notification Sounds.md",
+    "Welcome.md",
+    "07 - Frontend Concepts/Dark Mode + Appearance.md",
+    "Untitled.base",
+    "07 - Frontend Concepts/shadcn-svelte Components.md",
+    "07 - Frontend Concepts/Wayfinder (Type-Safe Routes).md",
+    "07 - Frontend Concepts/Inertia Shared Props.md",
+    "07 - Frontend Concepts/Inertia Form Component.md",
+    "07 - Frontend Concepts/Svelte 5 Runes.md",
+    "08 - Admin Panel (Filament)",
+    "07 - Frontend Concepts",
+    "06 - Backend Concepts",
+    "05 - Features",
+    "04 - Data Model",
+    "03 - Auth",
+    "02 - Architecture"
+  ]
+}

@@ -2,9 +2,13 @@
 
 namespace App\Providers;
 
+use App\Listeners\SendWelcomeEmail;
 use Carbon\CarbonImmutable;
+use Illuminate\Auth\Events\Registered;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
@@ -25,11 +29,13 @@ class AppServiceProvider extends ServiceProvider
                     return response()->json(['two_factor' => false]);
                 }
 
-                Inertia::flash('toast', [
-                    'type' => 'success',
-                    'title' => 'Welcome back, '.auth()->user()->name.'!',
-                    'description' => "You're now signed in to Y.",
-                ]);
+                if (! auth()->user()->isBanned()) {
+                    Inertia::flash('toast', [
+                        'type' => 'success',
+                        'title' => 'Welcome back, '.auth()->user()->name.'!',
+                        'description' => "You're now signed in to Y.",
+                    ]);
+                }
 
                 return redirect()->intended(config('fortify.home'));
             }
@@ -41,6 +47,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Event::listen(Registered::class, SendWelcomeEmail::class);
+        Model::preventLazyLoading(! app()->isProduction());
         $this->configureDefaults();
     }
 

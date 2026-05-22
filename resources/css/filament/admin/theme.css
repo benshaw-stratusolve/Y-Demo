@@ -1,0 +1,19 @@
+@import '../../../../vendor/filament/filament/resources/css/theme.css';
+@import '@fontsource-variable/inter';
+
+@source '../../../../app/Filament/**/*';
+@source '../../../../resources/views/filament/**/*';
+
+:root {
+    --font-family: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+
+    /* Sharper corners */
+    --radius-sm: 0.25rem;
+    --radius-md: 0.375rem;
+    --radius-lg: 0.5rem;
+    --radius-xl: 0.625rem;
+}
+
+.fi-sidebar {
+    width: 15rem !important;
+}

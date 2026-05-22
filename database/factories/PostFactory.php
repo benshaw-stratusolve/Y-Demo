@@ -23,6 +23,7 @@ class PostFactory extends Factory
             'body' => fake()->paragraph(),
             'parent_post_id' => null,
             'repost_of_id' => null,
+            'created_at' => fake()->dateTimeBetween('-30 days', 'now'),
         ];
     }
 }

@@ -32,8 +32,6 @@ class UserFactory extends Factory
             'remember_token' => Str::random(10),
             'username' => fake()->unique()->userName(),
             'bio' => fake()->optional()->sentence(),
-            'location' => fake()->optional()->city(),
-            'website' => fake()->optional()->url(),
         ];
     }
 

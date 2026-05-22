@@ -33,6 +33,7 @@
         DialogTrigger,
     } from '@/components/ui/dialog';
     import { send } from '@/routes/verification';
+    import BanModal from '@/components/BanModal.svelte';
 
     let {
         mustVerifyEmail,
@@ -46,6 +47,7 @@
 </script>
 
 <AppHead title="Profile settings" />
+<BanModal />
 
 <h1 class="sr-only">Profile settings</h1>
 
@@ -55,7 +57,7 @@
     <Heading
         variant="small"
         title="Profile information"
-        description="Update your name and email address"
+        description="Update your name, username and email address"
     />
 
     <Form
@@ -79,6 +81,37 @@
             </div>
 
             <div class="grid gap-2">
+                <Label for="username">Username</Label>
+                <div class="relative">
+                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 text-sm">@</span>
+                    <Input
+                        id="username"
+                        name="username"
+                        class="mt-1 block w-full pl-7"
+                        value={user.username}
+                        required
+                        autocomplete="off"
+                        placeholder="username"
+                    />
+                </div>
+                <InputError class="mt-2" message={errors.username} />
+            </div>
+
+            <div class="grid gap-2">
+                <Label for="bio">Bio</Label>
+                <textarea
+                    id="bio"
+                    name="bio"
+                    rows="3"
+                    maxlength="500"
+                    placeholder="Tell people a little about yourself..."
+                    class="mt-1 block w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
+                >{user.bio ?? ''}</textarea>
+                <p class="text-xs text-muted-foreground">Max 500 characters</p>
+                <InputError class="mt-2" message={errors.bio} />
+            </div>
+
+            <div class="grid gap-2">
                 <Label for="email">Email address</Label>
                 <Input
                     id="email"
@@ -92,23 +125,6 @@
                 />
                 <InputError class="mt-2" message={errors.email} />
             </div>
-
-            {#if mustVerifyEmail && !user.email_verified_at}
-                <div>
-                    <p class="-mt-4 text-sm text-muted-foreground">
-                        Your email address is unverified.
-                        <TextLink href={send()} as="button">
-                            Click here to resend the verification email.
-                        </TextLink>
-                    </p>
-
-                    {#if status === 'verification-link-sent'}
-                        <div class="mt-2 text-sm font-medium text-green-600">
-                            A new verification link has been sent to your email address.
-                        </div>
-                    {/if}
-                </div>
-            {/if}
 
             <div class="flex items-center gap-3">
                 <Button type="submit" disabled={processing} data-test="update-profile-button">

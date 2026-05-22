@@ -1,7 +1,9 @@
 <?php
 
 use App\Models\User;
+use App\Notifications\PasswordUpdateNotification;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Notification;
 use Inertia\Testing\AssertableInertia as Assert;
 
 test('security page is displayed', function () {
@@ -67,4 +69,45 @@ test('correct password must be provided to update password', function () {
     $response
         ->assertSessionHasErrors('current_password')
         ->assertRedirect(route('security.edit'));
+});
+
+test('password update notification is sent via mail and database channels', function () {
+    Notification::fake();
+
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->from(route('security.edit'))
+        ->put(route('user-password.update'), [
+            'current_password' => 'password',
+            'password' => 'P@ssword1',
+            'password_confirmation' => 'P@ssword1',
+        ]);
+
+    Notification::assertSentTo($user, PasswordUpdateNotification::class, function ($notification) use ($user) {
+        return in_array('mail', $notification->via($user))
+            && in_array('database', $notification->via($user));
+    });
+});
+
+test('password update notification toArray contains correct type', function () {
+    $user = User::factory()->create();
+    $data = (new PasswordUpdateNotification)->toArray($user);
+
+    expect($data['type'])->toBe('password_updated')
+        ->and($data['message'])->toContain('contact support');
+});
+
+test('password update notification uses the branded markdown mail layout', function () {
+    $user = User::factory()->create([
+        'name' => 'Taylor Otwell',
+    ]);
+
+    $message = (new PasswordUpdateNotification)->toMail($user);
+    $html = (string) $message->render();
+
+    expect($message->markdown)->toBe('mail.password-updated')
+        ->and($html)->toContain('Your password was updated, Taylor Otwell')
+        ->and($html)->toContain('Go to Y')
+        ->and($html)->toContain('The Y Team');
 });
