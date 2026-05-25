@@ -3,6 +3,7 @@
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FlockAIController;
 use App\Http\Controllers\FollowController;
+use App\Http\Controllers\MessagesController;
 use App\Http\Controllers\NotificationsController;
 use App\Http\Controllers\PostController;
 use App\Http\Controllers\SearchController;
@@ -31,16 +32,23 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('posts/{post}/like', [PostController::class, 'like'])->name('posts.like');
     Route::post('posts/{post}/repost', [PostController::class, 'repost'])->name('posts.repost');
     Route::post('posts/{post}/reply', [PostController::class, 'reply'])->name('posts.reply');
-    Route::inertia('messages', 'Messages')->name('messages');
+    Route::get('messages', [MessagesController::class, 'index'])->name('messages.index');
+    Route::get('messages/{conversation}', [MessagesController::class, 'show'])->name('messages.show');
+    Route::post('messages/{conversation}', [MessagesController::class, 'store'])->name('messages.store');
+    Route::post('messages/{conversation}/typing', [MessagesController::class, 'typing'])->name('messages.typing');
+    Route::post('conversations/with/{user}', [MessagesController::class, 'findOrCreate'])->name('conversations.find-or-create');
     Route::get('notifications', [NotificationsController::class, 'index'])->name('notifications');
     Route::get('flock-ai', [FlockAIController::class, 'index'])->name('flock-ai');
     Route::get('posts/{post}', [PostController::class, 'show'])->name('posts.show');
-    Route::post('flock-ai/chat', [FlockAIController::class, 'chat'])->name('flock-ai.chat');
+    Route::get('posts/{post}/replies.json', [PostController::class, 'repliesJson'])->name('posts.replies.json');
+    Route::post('flock-ai/chat', [FlockAIController::class, 'chat'])->name('flock-ai.chat')->middleware('throttle:20,1');
     Route::post('notifications/read-all', [NotificationsController::class, 'markAllRead'])->name('notifications.read-all');
     Route::post('notifications/{id}/read', [NotificationsController::class, 'markRead'])->name('notifications.read');
     Route::delete('notifications', [NotificationsController::class, 'clearAll'])->name('notifications.clear');
     Route::get('users/{user}', [UserController::class, 'show'])->name('users.show');
+    Route::get('users/{user}/posts.json', [UserController::class, 'postsJson'])->name('users.posts.json');
     Route::post('users/{user}/follow', [FollowController::class, 'toggle'])->name('users.follow');
+    Route::get('dashboard/posts.json', [DashboardController::class, 'postsJson'])->name('dashboard.posts.json');
     Route::get('search', [SearchController::class, 'index'])->name('search');
 });
 
