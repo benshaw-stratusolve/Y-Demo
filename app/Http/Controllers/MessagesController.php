@@ -138,7 +138,7 @@ class MessagesController extends Controller
     private function followingUsers(): array
     {
         return auth()->user()
-            ->followingUsers()
+            ->followedUsers()
             ->select('users.id', 'users.name', 'users.username', 'users.avatar_url')
             ->orderBy('users.name')
             ->get()
