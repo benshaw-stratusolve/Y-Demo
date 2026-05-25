@@ -6,17 +6,21 @@
     import SearchOverlay from '@/components/search-overlay/SearchOverlay.svelte';
     import AnimatedNotificationList from '@/components/animated-notification/AnimatedNotificationList.svelte';
     import { Home, Search, Bell, Sparkles, User } from 'lucide-svelte';
+    import HeaderToggles from '@/components/HeaderToggles.svelte';
     import AnimatedGradientText from '@/components/AnimatedGradientText.svelte';
     import { edit as editProfile } from '@/routes/profile';
     import { edit as editSecurity } from '@/routes/security';
     import { Badge } from '@/components/ui/badge';
     import UserAvatar from '@/components/UserAvatar.svelte';
+    import { realtimeStore } from '@/lib/realtime.svelte';
 
     let { children }: { children?: Snippet } = $props();
 
     const auth = $derived(page.props.auth as any);
     const currentUrl = $derived(page.url);
-    const unreadCount = $derived((page.props as any).unread_notifications_count as number ?? 0);
+    const unreadCount = $derived(
+        ((page.props as any).unread_notifications_count as number ?? 0) + realtimeStore.liveUnreadIncrement
+    );
 
     let searchOpen = $state(false);
 
@@ -42,7 +46,6 @@
                 <a href="/dashboard" class="p-5 rounded-full w-fit transition-colors" aria-label="Home">
                     <img src="/images/Y-dark-remove.png" alt="Y" class="h-9 w-9 object-contain dark:invert-0 invert" />
                 </a>
-                <AnimatedThemeToggler class="p-3 rounded-full transition-colors text-gray-900 dark:text-white" />
             </div>
 
             <nav class="flex flex-col gap-1 w-full mt-2">
@@ -148,6 +151,13 @@
             {@render children?.()}
         </div>
     </main>
+
+    <!-- Right toggles -->
+    <div class="hidden lg:block pt-3 pl-4">
+        <div class="sticky top-3">
+            <HeaderToggles />
+        </div>
+    </div>
 
 </div>
 
