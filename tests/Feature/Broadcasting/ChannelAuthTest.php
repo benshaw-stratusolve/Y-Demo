@@ -2,60 +2,40 @@
 
 use App\Models\User;
 use Illuminate\Support\Facades\Broadcast;
-use Illuminate\Support\Facades\Config;
-use Pusher\Pusher;
 
-beforeEach(function () {
-    // Switch from the null driver (set in phpunit.xml) to reverb so that
-    // channel callbacks are actually evaluated during auth.
-    Config::set('broadcasting.default', 'reverb');
-    Config::set('broadcasting.connections.reverb.key', 'testkey');
-    Config::set('broadcasting.connections.reverb.secret', 'testsecret');
-    Config::set('broadcasting.connections.reverb.app_id', '12345');
-    Config::set('broadcasting.connections.reverb.options.host', 'localhost');
-    Config::set('broadcasting.connections.reverb.options.port', 8080);
-    Config::set('broadcasting.connections.reverb.options.scheme', 'http');
-    Config::set('broadcasting.connections.reverb.options.useTLS', false);
+// Retrieve the real user.{id} callback registered by routes/channels.php.
+// channels.php is loaded during app bootstrap (via withRouting(channels:...)),
+// so by the time any test runs, Broadcast::channel('user.{id}', ...) has
+// already been called and the closure is stored on the default broadcaster.
+// Broadcast::getChannels() proxies via __call → driver()->getChannels().
+function getUserChannelCallback(): Closure
+{
+    $channels = Broadcast::getChannels();
+    $callback = $channels->get('user.{id}');
 
-    // Build a PusherBroadcaster with a mocked Pusher so authorizeChannel
-    // does not need a running server — it just returns a fake token.
-    $pusher = Mockery::mock(Pusher::class);
-    $pusher->allows('authorizeChannel')->andReturn('{"auth":"testkey:fakesig"}');
+    if (! $callback instanceof Closure) {
+        throw new RuntimeException(
+            'user.{id} channel callback not found — ensure routes/channels.php registers it.'
+        );
+    }
 
-    $broadcaster = new Illuminate\Broadcasting\Broadcasters\PusherBroadcaster($pusher);
+    return $callback;
+}
 
-    // Re-register our application channels on this broadcaster.
-    $broadcaster->channel('user.{id}', function ($user, $id) {
-        return (int) $user->id === (int) $id;
-    });
+// ──────────────────────────────────────────────────────────────────────────────
+// Direct callback tests — these exercise the REAL routes/channels.php closure.
+// If the production authorization logic changes, these tests will catch it.
+// ──────────────────────────────────────────────────────────────────────────────
 
-    // Replace the BroadcastManager so the controller uses our broadcaster.
-    $manager = Mockery::mock(Illuminate\Broadcasting\BroadcastManager::class)->makePartial();
-    $manager->allows('driver')->andReturn($broadcaster);
-    $manager->allows('auth')->andReturnUsing(fn ($req) => $broadcaster->auth($req));
-
-    app()->instance(Illuminate\Broadcasting\BroadcastManager::class, $manager);
-    Broadcast::clearResolvedInstances();
-    Broadcast::setFacadeApplication(app());
-});
-
-test('user can subscribe to their own private channel', function () {
+test('channel callback grants access to own channel', function () {
     $user = User::factory()->create();
-    $this->actingAs($user);
-
-    $this->post('/broadcasting/auth', [
-        'channel_name' => 'private-user.' . $user->id,
-        'socket_id'    => '123.456',
-    ])->assertOk();
+    $callback = getUserChannelCallback();
+    expect((bool) $callback($user, $user->id))->toBeTrue();
 });
 
-test('user cannot subscribe to another user private channel', function () {
+test('channel callback denies access to another user channel', function () {
     $user = User::factory()->create();
     $other = User::factory()->create();
-    $this->actingAs($user);
-
-    $this->post('/broadcasting/auth', [
-        'channel_name' => 'private-user.' . $other->id,
-        'socket_id'    => '123.456',
-    ])->assertForbidden();
+    $callback = getUserChannelCallback();
+    expect((bool) $callback($user, $other->id))->toBeFalse();
 });
