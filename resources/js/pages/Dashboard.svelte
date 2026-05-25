@@ -132,6 +132,7 @@
                         allPosts = allPosts.filter((p: any) => p.id !== postId);
                     }
                 }
+                realtimeStore.consumeDeletedPostIds();
             });
         }
     });

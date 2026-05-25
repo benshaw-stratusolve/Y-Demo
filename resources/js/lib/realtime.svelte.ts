@@ -119,6 +119,12 @@ function resetUnreadMessagesIncrement(): void {
     unreadMessagesIncrement = 0;
 }
 
+function consumeDeletedPostIds(): Set<number> {
+    const ids = new Set(deletedPostIds);
+    deletedPostIds = new Set();
+    return ids;
+}
+
 export const realtimeStore = {
     get newPosts() { return newPosts; },
     get postCounts() { return postCounts; },
@@ -135,4 +141,5 @@ export const realtimeStore = {
     resetUnreadIncrement,
     consumeNewMessages,
     resetUnreadMessagesIncrement,
+    consumeDeletedPostIds,
 };
