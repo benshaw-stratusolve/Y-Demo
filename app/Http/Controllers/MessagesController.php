@@ -138,6 +138,11 @@ class MessagesController extends Controller
         $user = auth()->user();
 
         return Conversation::with(['user1', 'user2', 'latestMessage'])
+            ->withCount([
+                'messages as unread_count' => fn ($q) => $q
+                    ->where('sender_id', '!=', $user->id)
+                    ->whereNull('read_at'),
+            ])
             ->where('user1_id', $user->id)
             ->orWhere('user2_id', $user->id)
             ->orderByDesc(
@@ -147,18 +152,22 @@ class MessagesController extends Controller
                     ->limit(1)
             )
             ->get()
-            ->map(fn (Conversation $conv) => [
-                'id' => $conv->id,
-                'other_user' => [
-                    'id' => $conv->otherUser($user->id)->id,
-                    'name' => $conv->otherUser($user->id)->name,
-                    'username' => $conv->otherUser($user->id)->username,
-                    'avatar_url' => $conv->otherUser($user->id)->avatar_url,
-                ],
-                'latest_message' => $conv->latestMessage?->body,
-                'latest_message_at' => $conv->latestMessage?->created_at?->diffForHumans(),
-                'unread_count' => $conv->unreadCount($user->id),
-            ])
+            ->map(function (Conversation $conv) use ($user) {
+                $other = $conv->otherUser($user->id);
+
+                return [
+                    'id' => $conv->id,
+                    'other_user' => [
+                        'id' => $other->id,
+                        'name' => $other->name,
+                        'username' => $other->username,
+                        'avatar_url' => $other->avatar_url,
+                    ],
+                    'latest_message' => $conv->latestMessage?->body,
+                    'latest_message_at' => $conv->latestMessage?->created_at?->diffForHumans(),
+                    'unread_count' => $conv->unread_count,
+                ];
+            })
             ->all();
     }
 }
