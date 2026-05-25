@@ -9,11 +9,24 @@ type Notification = {
     created_at: string;
     is_following_actor: boolean;
 };
+type MessageType = {
+    id: number;
+    conversation_id: number;
+    body: string;
+    sender_id: number;
+    sender: { id: number; name: string; username: string; avatar_url: string | null };
+    created_at: string;
+    is_mine: boolean;
+};
 
 let newPosts = $state<Post[]>([]);
 let postCounts = $state<Record<number, { likes_count: number; replies_count: number }>>({});
 let liveUnreadIncrement = $state(0);
 let incomingNotifications = $state<Notification[]>([]);
+let deletedPostIds = $state<Set<number>>(new Set());
+let newMessages = $state<Record<number, MessageType[]>>({});
+let typingConversations = $state<Set<number>>(new Set());
+let unreadMessagesIncrement = $state(0);
 
 let activeChannel: ReturnType<typeof echo.private> | null = null;
 let activeUserId: number | null = null;
@@ -32,6 +45,25 @@ function subscribeToUser(userId: number): void {
         .listen('.NotificationSent', (e: Notification) => {
             incomingNotifications = [e, ...incomingNotifications];
             liveUnreadIncrement += 1;
+        })
+        .listen('.PostDeletedBroadcast', (e: { post_id: number }) => {
+            deletedPostIds = new Set([...deletedPostIds, e.post_id]);
+        })
+        .listen('.MessageSent', (e: { message: MessageType }) => {
+            const convId = e.message.conversation_id;
+            newMessages = {
+                ...newMessages,
+                [convId]: [...(newMessages[convId] ?? []), e.message],
+            };
+            unreadMessagesIncrement += 1;
+        })
+        .listen('.UserTyping', (e: { conversation_id: number }) => {
+            typingConversations = new Set([...typingConversations, e.conversation_id]);
+            setTimeout(() => {
+                typingConversations = new Set(
+                    [...typingConversations].filter((id) => id !== e.conversation_id)
+                );
+            }, 3000);
         });
 }
 
@@ -45,6 +77,10 @@ function unsubscribeFromUser(): void {
     postCounts = {};
     liveUnreadIncrement = 0;
     incomingNotifications = [];
+    deletedPostIds = new Set();
+    newMessages = {};
+    typingConversations = new Set();
+    unreadMessagesIncrement = 0;
 }
 
 function consumeNewPosts(): Post[] {
@@ -63,14 +99,31 @@ function resetUnreadIncrement(): void {
     liveUnreadIncrement = 0;
 }
 
+function consumeNewMessages(conversationId: number): MessageType[] {
+    const msgs = [...(newMessages[conversationId] ?? [])];
+    const { [conversationId]: _, ...rest } = newMessages;
+    newMessages = rest;
+    return msgs;
+}
+
+function resetUnreadMessagesIncrement(): void {
+    unreadMessagesIncrement = 0;
+}
+
 export const realtimeStore = {
     get newPosts() { return newPosts; },
     get postCounts() { return postCounts; },
     get liveUnreadIncrement() { return liveUnreadIncrement; },
     get incomingNotifications() { return incomingNotifications; },
+    get deletedPostIds() { return deletedPostIds; },
+    get newMessages() { return newMessages; },
+    get typingConversations() { return typingConversations; },
+    get unreadMessagesIncrement() { return unreadMessagesIncrement; },
     subscribeToUser,
     unsubscribeFromUser,
     consumeNewPosts,
     consumeIncomingNotifications,
     resetUnreadIncrement,
+    consumeNewMessages,
+    resetUnreadMessagesIncrement,
 };
