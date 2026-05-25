@@ -1,9 +1,11 @@
 import { createInertiaApp } from '@inertiajs/svelte';
+import { router } from '@inertiajs/svelte';
 import AppLayout from '@/layouts/AppLayout.svelte';
 import AuthLayout from '@/layouts/AuthLayout.svelte';
 import DashboardSettingsLayout from '@/layouts/settings/DashboardSettingsLayout.svelte';
 import { initializeFlashToast } from '@/lib/flash-toast';
 import { initializeTheme } from '@/lib/theme.svelte';
+import { realtimeStore } from '@/lib/realtime.svelte';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
@@ -57,3 +59,24 @@ createInertiaApp({
 
 // This will listen for flash toast data from the server...
 initializeFlashToast();
+
+let currentUserId: number | null = null;
+
+function syncRealtimeUser(props: Record<string, any>): void {
+    const userId: number | null = props?.auth?.user?.id ?? null;
+    if (userId === currentUserId) return;
+    if (currentUserId !== null) realtimeStore.unsubscribeFromUser();
+    currentUserId = userId;
+    if (userId !== null) realtimeStore.subscribeToUser(userId);
+}
+
+// Initial page load — Inertia embeds page data in the #app element's data-page attribute
+const appEl = document.getElementById('app');
+if (appEl?.dataset.page) {
+    syncRealtimeUser(JSON.parse(appEl.dataset.page).props);
+}
+
+// Every subsequent Inertia navigation
+router.on('navigate', (event) => {
+    syncRealtimeUser((event.detail.page.props as Record<string, any>));
+});
