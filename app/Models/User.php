@@ -16,7 +16,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Storage;
 
-#[Fillable(['name', 'email', 'password', 'avatar', 'username', 'bio', 'profanity_strikes'])]
+#[Fillable(['name', 'email', 'password', 'avatar', 'username', 'bio'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements FilamentUser
 {
@@ -44,7 +44,7 @@ class User extends Authenticatable implements FilamentUser
 
     public function canAccessPanel(Panel $panel): bool
     {
-        return $this->is_admin === true;
+        return (bool) static::find($this->id)?->is_admin;
     }
 
     protected function casts(): array
@@ -90,5 +90,12 @@ class User extends Authenticatable implements FilamentUser
     public function likedPosts(): BelongsToMany
     {
         return $this->belongsToMany(Post::class, 'likes', 'user_id', 'post_id')->withTimestamps();
+    }
+
+    public function unreadMessagesCount(): int
+    {
+        return Message::whereHas('conversation', function ($q) {
+            $q->where('user1_id', $this->id)->orWhere('user2_id', $this->id);
+        })->where('sender_id', '!=', $this->id)->whereNull('read_at')->count();
     }
 }
