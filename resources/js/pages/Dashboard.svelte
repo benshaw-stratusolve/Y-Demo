@@ -18,7 +18,7 @@
     import BanModal from '@/components/BanModal.svelte';
     import { charCounterClass, showCharCounter } from '@/lib/char-counter';
     import { realtimeStore } from '@/lib/realtime.svelte';
-    import { animatePostIn, animatePostsStagger } from '@/lib/anime-utils';
+    import { animatePostIn, animatePostsStagger, animatePostOut } from '@/lib/anime-utils';
 
     let searchOpen = $state(false);
     let soundEnabled = $state(isSoundEnabled());
@@ -120,7 +120,18 @@
         const deleted = realtimeStore.deletedPostIds;
         if (deleted.size > 0) {
             untrack(() => {
-                allPosts = allPosts.filter((p: any) => !deleted.has(p.id));
+                for (const postId of deleted) {
+                    const el = document.getElementById(`post-${postId}`);
+                    if (el) {
+                        if (el.dataset.removing) continue;
+                        el.dataset.removing = 'true';
+                        animatePostOut(el, () => {
+                            allPosts = allPosts.filter((p: any) => p.id !== postId);
+                        });
+                    } else {
+                        allPosts = allPosts.filter((p: any) => p.id !== postId);
+                    }
+                }
             });
         }
     });
