@@ -6,9 +6,10 @@ use App\Concerns\BroadcastsNotification;
 use App\Models\User;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 
-class ReplyNotification extends Notification implements ShouldBroadcast
+class ReplyNotification extends Notification implements ShouldBroadcast, ShouldQueue
 {
     use Queueable, BroadcastsNotification;
 

@@ -14,10 +14,25 @@ class PostBroadcast implements ShouldBroadcast
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
+    public int $likesCount;
+    public int $repliesCount;
+    public array $postUser;
+
     public function __construct(
         public Post $post,
         public User $follower,
-    ) {}
+    ) {
+        $post->loadCount(['likes', 'replies']);
+        $post->load('user');
+        $this->likesCount = $post->likes_count;
+        $this->repliesCount = $post->replies_count;
+        $this->postUser = [
+            'id' => $post->user->id,
+            'name' => $post->user->name,
+            'username' => $post->user->username,
+            'avatar_url' => $post->user->avatar_url,
+        ];
+    }
 
     public function broadcastOn(): array
     {
@@ -31,27 +46,19 @@ class PostBroadcast implements ShouldBroadcast
 
     public function broadcastWith(): array
     {
-        $this->post->loadCount(['likes', 'replies']);
-        $this->post->load('user');
-
         return [
             'post' => [
                 'id' => $this->post->id,
                 'body' => $this->post->body,
                 'image_url' => $this->post->image_url,
-                'likes_count' => $this->post->likes_count,
-                'replies_count' => $this->post->replies_count,
+                'likes_count' => $this->likesCount,
+                'replies_count' => $this->repliesCount,
                 'repost_of_id' => $this->post->repost_of_id,
                 'parent_post_id' => $this->post->parent_post_id,
                 'liked_by_user' => false,
                 'reposted_by_user' => false,
                 'created_at' => $this->post->created_at->diffForHumans(),
-                'user' => [
-                    'id' => $this->post->user->id,
-                    'name' => $this->post->user->name,
-                    'username' => $this->post->user->username,
-                    'avatar_url' => $this->post->user->avatar_url,
-                ],
+                'user' => $this->postUser,
             ],
         ];
     }
