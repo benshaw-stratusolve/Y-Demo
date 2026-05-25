@@ -139,7 +139,6 @@ class MessagesController extends Controller
     {
         return auth()->user()
             ->followedUsers()
-            ->select('users.id', 'users.name', 'users.username', 'users.avatar_url')
             ->orderBy('users.name')
             ->get()
             ->map(fn (User $user) => [
