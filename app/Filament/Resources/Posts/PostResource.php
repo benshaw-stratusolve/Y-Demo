@@ -4,12 +4,18 @@ namespace App\Filament\Resources\Posts;
 
 use App\Concerns\HasAvatarFallback;
 use App\Models\Post;
+use App\Notifications\PostDeletedNotification;
+use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
+use Filament\Forms;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\HtmlString;
 
 class PostResource extends Resource
 {
@@ -49,15 +55,6 @@ class PostResource extends Resource
                     ->counts('likes')
                     ->label('Likes')
                     ->alignCenter(),
-                Tables\Columns\IconColumn::make('image')
-                    ->label('Has Image')
-                    ->getStateUsing(fn ($record) => $record->image !== null)
-                    ->boolean()
-                    ->trueIcon('heroicon-o-photo')
-                    ->falseIcon('heroicon-o-x-circle')
-                    ->trueColor('success')
-                    ->falseColor('gray')
-                    ->alignCenter(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable(),
@@ -90,7 +87,34 @@ class PostResource extends Resource
                     }),
             ])
             ->recordActions([
-                DeleteAction::make(),
+                ActionGroup::make([
+                    Action::make('view_image')
+                        ->label('View Image')
+                        ->icon('heroicon-o-photo')
+                        ->color('info')
+                        ->visible(fn (Post $record) => $record->image !== null)
+                        ->modalHeading('Post Image')
+                        ->modalContent(fn (Post $record) => new HtmlString(
+                            '<div class="flex justify-center p-4"><img src="'.e(Storage::disk('public')->url($record->image)).'" alt="Post image" style="max-height:70vh;max-width:100%;border-radius:0.5rem;" /></div>'
+                        ))
+                        ->modalSubmitAction(false)
+                        ->modalCancelActionLabel('Close'),
+                    DeleteAction::make()
+                        ->form([
+                            Forms\Components\Textarea::make('reason')
+                                ->label('Reason for deletion')
+                                ->placeholder('Explain why this post is being removed...')
+                                ->required()
+                                ->rows(3),
+                        ])
+                        ->action(function (Post $record, array $data) {
+                            $excerpt = $record->body ?? '';
+                            if ($record->user) {
+                                $record->user->notify(new PostDeletedNotification($excerpt, $data['reason'] ?? null));
+                            }
+                            $record->delete();
+                        }),
+                ]),
             ])
             ->defaultSort('created_at', 'desc');
     }

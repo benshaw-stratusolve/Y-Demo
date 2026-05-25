@@ -2,37 +2,33 @@
 
 namespace App\Events;
 
-use App\Models\Post;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class PostInteractionUpdated implements ShouldBroadcastNow
+class PostDeletedBroadcast implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
-    public function __construct(public Post $post) {}
+    public function __construct(
+        public int $postId,
+        public int $followerId,
+    ) {}
 
     public function broadcastOn(): array
     {
-        return [new PrivateChannel('user.'.$this->post->user_id)];
+        return [new PrivateChannel('user.'.$this->followerId)];
     }
 
     public function broadcastAs(): string
     {
-        return 'PostInteractionUpdated';
+        return 'PostDeletedBroadcast';
     }
 
     public function broadcastWith(): array
     {
-        $this->post->loadCount(['likes', 'replies']);
-
-        return [
-            'post_id' => $this->post->id,
-            'likes_count' => $this->post->likes_count,
-            'replies_count' => $this->post->replies_count,
-        ];
+        return ['post_id' => $this->postId];
     }
 }

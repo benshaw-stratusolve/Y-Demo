@@ -4,11 +4,12 @@ namespace App\Providers;
 
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
+use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
@@ -60,11 +61,30 @@ class FortifyServiceProvider extends ServiceProvider
             ]);
         });
 
-        Fortify::resetPasswordView(fn (Request $request) => Inertia::render('auth/ResetPassword', [
-            'email' => $request->email,
-            'token' => $request->route('token'),
-            'passwordRules' => Password::defaults()->toPasswordRulesString(),
-        ]));
+        Fortify::resetPasswordView(function (Request $request) {
+            $token = $request->route('token');
+            $email = $request->query('email', $request->email);
+
+            $user = User::where('email', $email)->first();
+            $tokenValid = $user && \Illuminate\Support\Facades\Password::broker()->tokenExists($user, $token);
+
+            // Distinguish "already used" (record deleted after reset) from "expired" (record still exists but too old)
+            $tokenInvalidReason = null;
+            if (! $tokenValid) {
+                $recordExists = DB::table(config('auth.passwords.users.table', 'password_reset_tokens'))
+                    ->where('email', $email)
+                    ->exists();
+                $tokenInvalidReason = $recordExists ? 'expired' : 'used';
+            }
+
+            return Inertia::render('auth/ResetPassword', [
+                'email' => $email,
+                'token' => $token,
+                'passwordRules' => Password::defaults()->toPasswordRulesString(),
+                'tokenInvalid' => ! $tokenValid,
+                'tokenInvalidReason' => $tokenInvalidReason,
+            ]);
+        });
 
         Fortify::requestPasswordResetLinkView(fn (Request $request) => Inertia::render('auth/ForgotPassword', [
             'status' => $request->session()->get('status'),
@@ -92,12 +112,10 @@ class FortifyServiceProvider extends ServiceProvider
      */
     private function configureRateLimiting(): void
     {
+        // Progressive lockout is handled by ProgressiveLoginThrottle middleware.
+        // This limiter is set high to avoid conflicting with our custom logic.
         RateLimiter::for('login', function (Request $request) {
-            $throttleKey = Str::transliterate(Str::lower($request->input(Fortify::username())).'|'.$request->ip());
-
-            return app()->environment('local')
-                ? Limit::perMinute(100)->by($throttleKey)
-                : Limit::perMinute(5)->by($throttleKey);
+            return Limit::perHour(10000)->by($request->ip());
         });
     }
 }

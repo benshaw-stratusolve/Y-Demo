@@ -11,7 +11,7 @@ use Illuminate\Support\Str;
 
 class PostDeletedNotification extends Notification implements ShouldBroadcast, ShouldQueue
 {
-    use Queueable, BroadcastsNotification;
+    use BroadcastsNotification, Queueable;
 
     public function __construct(
         public string $postExcerpt,

@@ -4,17 +4,20 @@ namespace App\Http\Controllers;
 
 use App\Concerns\HandlesProfanityStrikes;
 use App\Events\PostBroadcast;
+use App\Events\PostDeletedBroadcast;
 use App\Events\PostInteractionUpdated;
 use App\Jobs\ProcessPostImage;
 use App\Models\Post;
 use App\Models\User;
 use App\Notifications\CommentCreatedNotification;
 use App\Notifications\CommentDeletedNotification;
-use App\Notifications\PostDeletedNotification;
 use App\Notifications\LikeNotification;
+use App\Notifications\NewPostNotification;
 use App\Notifications\PostCreatedNotification;
+use App\Notifications\PostDeletedNotification;
 use App\Notifications\ReplyNotification;
 use App\Services\ProfanityService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -59,8 +62,14 @@ class PostController extends Controller
 
         $user->notify(new PostCreatedNotification($post));
 
-        $user->followerUsers()->each(function (User $follower) use ($post) {
-            broadcast(new PostBroadcast($post, $follower));
+        $user->followerUsers()->each(function (User $follower) use ($post, $user) {
+            try {
+                broadcast(new PostBroadcast($post, $follower));
+            } catch (\Throwable) {
+                // Reverb unavailable — skip real-time push, post still saved
+            }
+
+            $follower->notify(new NewPostNotification($user, $post));
         });
 
         return to_route('dashboard');
@@ -81,7 +90,11 @@ class PostController extends Controller
         }
 
         $post->loadCount(['likes', 'replies']);
-        broadcast(new PostInteractionUpdated($post));
+        try {
+            broadcast(new PostInteractionUpdated($post));
+        } catch (\Throwable) {
+            // Reverb unavailable — skip real-time push
+        }
 
         return back();
     }
@@ -112,6 +125,8 @@ class PostController extends Controller
 
         $user = $post->user;
         $excerpt = $post->body ?? '';
+        $postId = $post->id;
+        $followerIds = $user->followerUsers()->pluck('users.id');
 
         // Remove the orphaned "post published" notification for this post
         $user->notifications()
@@ -124,6 +139,14 @@ class PostController extends Controller
         }
 
         $post->delete();
+
+        foreach ($followerIds as $followerId) {
+            try {
+                broadcast(new PostDeletedBroadcast($postId, $followerId));
+            } catch (\Throwable) {
+                // Reverb unavailable — skip real-time push
+            }
+        }
 
         if ($excerpt) {
             $notification = $post->parent_post_id
@@ -149,6 +172,7 @@ class PostController extends Controller
         $rateLimitKey = 'reply:'.$user->id;
         if (RateLimiter::tooManyAttempts($rateLimitKey, 5)) {
             $seconds = RateLimiter::availableIn($rateLimitKey);
+
             return back()->withErrors(['reply_limit' => "You're commenting too fast. Try again in {$seconds} ".($seconds === 1 ? 'second' : 'seconds').'.']);
         }
         RateLimiter::hit($rateLimitKey, 300);
@@ -169,7 +193,11 @@ class PostController extends Controller
         }
 
         $post->loadCount(['likes', 'replies']);
-        broadcast(new PostInteractionUpdated($post));
+        try {
+            broadcast(new PostInteractionUpdated($post));
+        } catch (\Throwable) {
+            // Reverb unavailable — skip real-time push
+        }
 
         return back();
     }
@@ -207,7 +235,7 @@ class PostController extends Controller
         ]);
     }
 
-    public function repliesJson(Post $post): \Illuminate\Http\JsonResponse
+    public function repliesJson(Post $post): JsonResponse
     {
         $replies = $post->replies()
             ->with('user')

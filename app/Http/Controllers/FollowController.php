@@ -12,6 +12,10 @@ class FollowController extends Controller
     {
         abort_if($user->id === auth()->id(), 403);
 
+        if (auth()->user()->isBanned()) {
+            return back()->withErrors(['account_banned' => 'Your account has been banned.']);
+        }
+
         $changes = auth()->user()->followedUsers()->toggle($user->id);
 
         if (! empty($changes['attached'])) {

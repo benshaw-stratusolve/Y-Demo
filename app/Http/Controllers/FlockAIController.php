@@ -10,7 +10,7 @@ use Inertia\Response;
 
 class FlockAIController extends Controller
 {
-    private const SYSTEM_PROMPT = 'You are FlockAI, an intelligent AI assistant embedded in Y — a modern social platform. Help users with content ideas, conversation starters, community building, trend analysis, and general questions. Be concise, friendly, and direct. Keep responses focused unless the user asks for detail.';
+    private const SYSTEM_PROMPT = 'You are FlockAI, an intelligent AI assistant embedded in Y — a modern social platform. Help users with content ideas, conversation starters, community building, trend analysis, and general questions. Be concise, friendly, and direct. Keep responses focused unless the user asks for detail. Format your responses using Markdown: use **bold** for emphasis, bullet lists for multiple items, and headings (##, ###) sparingly when structuring longer answers.';
 
     public function index(): Response
     {
@@ -19,6 +19,10 @@ class FlockAIController extends Controller
 
     public function chat(Request $request): JsonResponse
     {
+        if (auth()->user()->isBanned()) {
+            return response()->json(['message' => 'Your account has been banned.'], 403);
+        }
+
         $request->validate([
             'message' => ['required', 'string', 'max:2000'],
             'history' => ['sometimes', 'array', 'max:20'],
@@ -39,13 +43,14 @@ class FlockAIController extends Controller
             ->all();
 
         $model = config('services.gemini.model');
-        $response = Http::post(
-            "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key=".config('services.gemini.key'),
-            [
-                'system_instruction' => ['parts' => [['text' => self::SYSTEM_PROMPT]]],
-                'contents' => $contents,
-            ]
-        );
+        $response = Http::withHeaders(['x-goog-api-key' => config('services.gemini.key')])
+            ->post(
+                "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent",
+                [
+                    'system_instruction' => ['parts' => [['text' => self::SYSTEM_PROMPT]]],
+                    'contents' => $contents,
+                ]
+            );
 
         if ($response->failed()) {
             return response()->json(

@@ -29,10 +29,10 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->viteTheme('resources/css/filament/admin/theme.css')
-            ->login()
             ->brandName('Y')
             ->brandLogo(asset('images/Y-dark-remove.png'))
             ->brandLogoHeight('3rem')
+            ->favicon(asset('favicon.png'))
             ->darkMode(isForced: true)
             ->colors([
                 'primary' => Color::Indigo,

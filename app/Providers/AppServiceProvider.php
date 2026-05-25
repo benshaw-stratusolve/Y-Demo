@@ -2,13 +2,10 @@
 
 namespace App\Providers;
 
-use App\Listeners\SendWelcomeEmail;
 use Carbon\CarbonImmutable;
-use Illuminate\Auth\Events\Registered;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
@@ -47,7 +44,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        Event::listen(Registered::class, SendWelcomeEmail::class);
         Model::preventLazyLoading(! app()->isProduction());
         $this->configureDefaults();
     }

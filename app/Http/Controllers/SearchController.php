@@ -21,18 +21,10 @@ class SearchController extends Controller
         $query = trim($validated['q'] ?? '');
 
         if (mb_strlen($query) < 2) {
-            $recentPosts = Post::with('user:id,name,username,avatar')
-                ->whereNotNull('body')
-                ->whereNull('repost_of_id')
-                ->whereNull('parent_post_id')
-                ->latest()
-                ->limit(8)
-                ->get(['id', 'body', 'user_id']);
-
             return response()->json([
                 'query' => $query,
                 'users' => [],
-                'posts' => $recentPosts,
+                'posts' => [],
                 'suggestions' => [],
             ]);
         }
@@ -52,6 +44,20 @@ class SearchController extends Controller
     }
 
     /**
+     * @return EloquentCollection<int, Post>
+     */
+    private function matchingPosts(string $likeQuery): EloquentCollection
+    {
+        return Post::query()
+            ->whereNull('repost_of_id')
+            ->where('body', 'like', $likeQuery)
+            ->with('user:id,name,username,avatar')
+            ->latest()
+            ->limit(10)
+            ->get(['id', 'body', 'user_id', 'created_at']);
+    }
+
+    /**
      * @return EloquentCollection<int, User>
      */
     private function matchingUsers(string $query, string $likeQuery): EloquentCollection
@@ -66,20 +72,6 @@ class SearchController extends Controller
             ->orderBy('name')
             ->limit(5)
             ->get(['id', 'name', 'username', 'avatar']);
-    }
-
-    /**
-     * @return EloquentCollection<int, Post>
-     */
-    private function matchingPosts(string $likeQuery): EloquentCollection
-    {
-        return Post::with('user:id,name,username,avatar')
-            ->whereNotNull('body')
-            ->where('body', 'like', $likeQuery)
-            ->whereNull('repost_of_id')
-            ->latest()
-            ->limit(5)
-            ->get(['id', 'body', 'user_id']);
     }
 
     /**

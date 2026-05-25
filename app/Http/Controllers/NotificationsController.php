@@ -14,6 +14,8 @@ class NotificationsController extends Controller
     {
         $user = $request->user();
 
+        $unreadCount = $user->unreadNotifications()->count();
+
         $rawNotifications = $user->notifications()->latest()->get();
 
         $user->unreadNotifications()->update(['read_at' => now()]);
@@ -58,7 +60,7 @@ class NotificationsController extends Controller
 
         return Inertia::render('Notifications', [
             'notifications' => $notifications,
-            'unread_count' => $request->user()->unreadNotifications()->count(),
+            'unread_count' => $unreadCount,
         ]);
     }
 

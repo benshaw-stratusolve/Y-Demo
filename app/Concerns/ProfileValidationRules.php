@@ -3,6 +3,7 @@
 namespace App\Concerns;
 
 use App\Models\User;
+use App\Services\ProfanityService;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Validation\Rule;
 
@@ -36,17 +37,28 @@ trait ProfileValidationRules
     /**
      * @return array<int, ValidationRule|array<mixed>|string>
      */
-    protected function usernameRules(?int $userId = null): array
+    protected function usernameRules(?int $userId = null, bool $checkProfanity = true): array
     {
-        return [
+        $rules = [
             'required',
             'string',
+            'min:3',
             'max:30',
             'regex:/^[a-zA-Z0-9_]+$/',
             $userId === null
                 ? Rule::unique(User::class)
                 : Rule::unique(User::class)->ignore($userId),
         ];
+
+        if ($checkProfanity) {
+            $rules[] = function (string $attribute, mixed $value, \Closure $fail) {
+                if (app(ProfanityService::class)->contains($value)) {
+                    $fail('The username contains inappropriate language.');
+                }
+            };
+        }
+
+        return $rules;
     }
 
     /**

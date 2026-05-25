@@ -35,8 +35,8 @@ class UserResource extends Resource
     {
         return $schema->components([
             Forms\Components\TextInput::make('name')->required()->maxLength(255),
-            Forms\Components\TextInput::make('username')->required()->maxLength(255),
-            Forms\Components\TextInput::make('email')->email()->required()->maxLength(255),
+            Forms\Components\TextInput::make('username')->required()->maxLength(255)->unique(table: 'users', ignoreRecord: true),
+            Forms\Components\TextInput::make('email')->email()->required()->maxLength(255)->unique(table: 'users', ignoreRecord: true),
             Forms\Components\TextInput::make('password')
                 ->password()
                 ->required(fn (string $operation) => $operation === 'create')
@@ -140,7 +140,7 @@ class UserResource extends Resource
                     Action::make('reset_strikes')
                         ->label('Reset Strikes')
                         ->action(function (User $record, Component $livewire) {
-                            $record->update(['profanity_strikes' => 0]);
+                            $record->forceFill(['profanity_strikes' => 0])->save();
                             Notification::make()
                                 ->title('Strikes reset')
                                 ->body($record->name.'\'s profanity strikes have been cleared.')
@@ -154,6 +154,11 @@ class UserResource extends Resource
                     Action::make('toggle_admin')
                         ->label(fn (User $record) => $record->is_admin ? 'Revoke Admin' : 'Make Admin')
                         ->action(function (User $record, Component $livewire) {
+                            if ($record->id === auth()->id()) {
+                                Notification::make()->title('You cannot revoke your own admin status.')->danger()->send();
+
+                                return;
+                            }
                             $record->forceFill(['is_admin' => ! $record->is_admin])->save();
                             Notification::make()
                                 ->title($record->is_admin ? 'Admin granted' : 'Admin revoked')
@@ -163,6 +168,8 @@ class UserResource extends Resource
                                 ->send();
                             $livewire->dispatch('refresh-sidebar');
                         })
+                        ->disabled(fn (User $record) => $record->id === auth()->id())
+                        ->hidden(fn (User $record) => $record->id === auth()->id())
                         ->requiresConfirmation()
                         ->color('warning')
                         ->icon('heroicon-o-shield-check'),
@@ -175,6 +182,7 @@ class UserResource extends Resource
     {
         return [
             'index' => Pages\ListUsers::route('/'),
+            'create' => Pages\CreateUser::route('/create'),
             'banned' => Pages\ListBannedUsers::route('/banned'),
             'edit' => Pages\EditUser::route('/{record}/edit'),
         ];

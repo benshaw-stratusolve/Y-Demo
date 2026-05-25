@@ -35,6 +35,10 @@ class ProfileController extends Controller
      */
     public function update(ProfileUpdateRequest $request, ProfanityService $profanity): RedirectResponse
     {
+        if ($request->filled('username') && $profanity->contains($request->username)) {
+            return $this->handleStrike($request->user(), 'Your username contains inappropriate language.', 'username');
+        }
+
         if ($request->filled('bio') && $profanity->contains($request->bio)) {
             return $this->handleStrike($request->user(), 'Your bio contains inappropriate language.', 'bio');
         }

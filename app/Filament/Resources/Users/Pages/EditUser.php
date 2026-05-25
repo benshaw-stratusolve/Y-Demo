@@ -64,6 +64,11 @@ class EditUser extends EditRecord
             Action::make('toggle_admin')
                 ->label(fn () => $this->record->is_admin ? 'Revoke Admin' : 'Make Admin')
                 ->action(function () {
+                    if ($this->record->id === auth()->id()) {
+                        Notification::make()->title('You cannot revoke your own admin status.')->danger()->send();
+
+                        return;
+                    }
                     $this->record->forceFill(['is_admin' => ! $this->record->is_admin])->save();
                     Notification::make()
                         ->title($this->record->is_admin ? 'Admin granted' : 'Admin revoked')
@@ -73,6 +78,8 @@ class EditUser extends EditRecord
                         ->send();
                     $this->dispatch('refresh-sidebar');
                 })
+                ->disabled(fn () => $this->record->id === auth()->id())
+                ->hidden(fn () => $this->record->id === auth()->id())
                 ->requiresConfirmation()
                 ->color('warning')
                 ->icon('heroicon-o-shield-check'),

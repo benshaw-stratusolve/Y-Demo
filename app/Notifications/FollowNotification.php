@@ -11,7 +11,7 @@ use Illuminate\Notifications\Notification;
 
 class FollowNotification extends Notification implements ShouldBroadcast, ShouldQueue
 {
-    use Queueable, BroadcastsNotification;
+    use BroadcastsNotification, Queueable;
 
     public function __construct(public User $actor) {}
 

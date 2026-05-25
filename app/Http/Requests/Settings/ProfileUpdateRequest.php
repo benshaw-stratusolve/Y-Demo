@@ -17,6 +17,10 @@ class ProfileUpdateRequest extends FormRequest
      */
     public function rules(): array
     {
-        return $this->profileRules($this->user()->id);
+        $rules = $this->profileRules($this->user()->id);
+        // Profanity on username is handled in the controller so it can issue a strike
+        $rules['username'] = $this->usernameRules($this->user()->id, checkProfanity: false);
+
+        return $rules;
     }
 }

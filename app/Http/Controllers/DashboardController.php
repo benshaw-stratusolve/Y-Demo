@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Like;
 use App\Models\Post;
 use App\Models\User;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -91,5 +92,40 @@ class DashboardController extends Controller
             'isDiscoveryFeed' => $isNewUser,
             'activeTab' => $request->get('tab', 'forYou'),
         ]);
+    }
+
+    public function postsJson(Request $request): JsonResponse
+    {
+        $user = auth()->user();
+        $followingIds = $user->follows()->pluck('following_id')->push($user->id);
+        $isNewUser = $user->follows()->doesntExist();
+
+        $postsQuery = Post::with(['user', 'replies.user'])
+            ->withCount(['likes', 'replies'])
+            ->whereNull('parent_post_id')
+            ->whereNull('repost_of_id')
+            ->whereNotNull('body')
+            ->latest();
+
+        if (! $isNewUser) {
+            $postsQuery->whereIn('user_id', $followingIds);
+        }
+
+        $posts = $postsQuery->paginate(10);
+
+        $postIds = $posts->pluck('id');
+        $likedIds = Like::where('user_id', $user->id)
+            ->whereIn('post_id', $postIds)
+            ->pluck('post_id')
+            ->flip()
+            ->all();
+
+        $posts->through(function (Post $post) use ($likedIds) {
+            $post->liked_by_user = isset($likedIds[$post->id]);
+
+            return $post;
+        });
+
+        return response()->json($posts);
     }
 }
