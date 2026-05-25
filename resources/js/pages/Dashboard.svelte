@@ -98,7 +98,9 @@
             } else {
                 // Poll refresh: merge fresh page-1 data at top, keep extras
                 const freshIds = new Set(data.map((p: any) => p.id));
-                const rest = allPosts.filter((p: any) => !freshIds.has(p.id));
+                const rest = allPosts
+                    .filter((p: any) => !freshIds.has(p.id))
+                    .map((p: any) => { const { _isNew, ...post } = p; return post; });
                 allPosts = [...data, ...rest];
             }
         });
