@@ -8,7 +8,8 @@
     import AnimatedThemeToggler from '@/components/animated-theme-toggler/AnimatedThemeToggler.svelte';
     import AnimatedGradientText from '@/components/AnimatedGradientText.svelte';
     import UserAvatar from '@/components/UserAvatar.svelte';
-    import { Home, Bell, Sparkles, User } from 'lucide-svelte';
+    import { Home, Bell, Sparkles, User, MessageSquare } from 'lucide-svelte';
+    import { index as messagesIndex } from '@/actions/App/Http/Controllers/MessagesController';
     import HeaderToggles from '@/components/HeaderToggles.svelte';
     import { clearAll } from '@/actions/App/Http/Controllers/NotificationsController';
     import { Badge } from '@/components/ui/badge';
@@ -33,6 +34,9 @@
     });
 
     const auth = $derived(page.props.auth as any);
+    const unreadMessagesCount = $derived(
+        ((page.props as any).unread_messages_count as number ?? 0) + realtimeStore.unreadMessagesIncrement
+    );
 
     let selectedNotif = $state<Notification | null>(null);
 
@@ -63,7 +67,7 @@
     function notifDestination(notif: Notification): string | null {
         if (notif.type === 'like' || notif.type === 'reply') return null; // shown in modal
         if (notif.type === 'follow' && notif.data.actor_id) return `/users/${notif.data.actor_id}`;
-        if ((notif.type === 'post_created' || notif.type === 'comment_created') && notif.data.post_id) return `/posts/${notif.data.post_id}`;
+        if ((notif.type === 'post_created' || notif.type === 'comment_created' || notif.type === 'new_post') && notif.data.post_id) return `/posts/${notif.data.post_id}`;
         return null;
     }
 </script>
@@ -84,6 +88,7 @@
                 {#each [
                     { label: 'Home', icon: Home, href: '/dashboard' },
                     { label: 'Notifications', icon: Bell, href: '/notifications', active: true },
+                    { label: 'Messages', icon: MessageSquare, href: messagesIndex().url },
                     { label: 'Flok', icon: Sparkles, href: '/flock-ai' },
                     { label: 'Profile', icon: User, href: '/settings/profile' },
                 ] as item}
@@ -107,6 +112,13 @@
                                 <Icon class="w-6 h-6" />
                                 {#if unread_count > 0}
                                     <span class="absolute -top-1 -right-1 bg-blue-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{unread_count > 9 ? '9+' : unread_count}</span>
+                                {/if}
+                            </div>
+                        {:else if item.label === 'Messages'}
+                            <div class="relative">
+                                <Icon class="w-6 h-6" />
+                                {#if unreadMessagesCount > 0}
+                                    <span class="absolute -top-1 -right-1 min-w-[16px] h-4 bg-blue-500 rounded-full text-white text-[9px] font-bold flex items-center justify-center px-0.5">{unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}</span>
                                 {/if}
                             </div>
                         {:else}

@@ -1,14 +1,15 @@
 <script lang="ts">
+    import { untrack } from 'svelte';
     import AppHead from '@/components/AppHead.svelte';
     import { destroy as logout } from '@/actions/Laravel/Fortify/Http/Controllers/AuthenticatedSessionController';
-    import AnimatedThemeToggler from '@/components/animated-theme-toggler/AnimatedThemeToggler.svelte';
     import { Home, Search, Bell, Sparkles, User } from 'lucide-svelte';
+    import HeaderToggles from '@/components/HeaderToggles.svelte';
     import AnimatedGradientText from '@/components/AnimatedGradientText.svelte';
     import UserAvatar from '@/components/UserAvatar.svelte';
     import { Badge } from '@/components/ui/badge';
-    import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationPrevious, PaginationNext, PaginationEllipsis } from '@/components/ui/pagination';
     import { page, router } from '@inertiajs/svelte';
     import { destroy as destroyPost } from '@/actions/App/Http/Controllers/PostController';
+    import { findOrCreate as findOrCreateConversation } from '@/actions/App/Http/Controllers/MessagesController';
 
     let { profileUser, posts, isFollowing = false, isOwnProfile = false, activeTab = 'posts' }: {
         profileUser: any;
@@ -19,6 +20,59 @@
     } = $props();
 
     let openMenuId = $state<number | null>(null);
+
+    // ── Infinite scroll ──────────────────────────────────────────────────────
+    let allPosts = $state<any[]>([...posts.data]);
+    let scrollPage = $state(1);
+    let hasMore = $state(posts.last_page > 1);
+    let loadingMore = $state(false);
+    let sentinel = $state<HTMLElement | null>(null);
+    let prevTab = activeTab;
+
+    $effect(() => {
+        const data = posts.data;
+        const tab = activeTab;
+        untrack(() => {
+            if (tab !== prevTab) {
+                prevTab = tab;
+                allPosts = [...data];
+                scrollPage = 1;
+                hasMore = posts.last_page > 1;
+            }
+        });
+    });
+
+    $effect(() => {
+        if (!sentinel) return;
+        const obs = new IntersectionObserver(
+            ([entry]) => { if (entry.isIntersecting) loadMore(); },
+            { rootMargin: '400px' }
+        );
+        obs.observe(sentinel);
+        return () => obs.disconnect();
+    });
+
+    async function loadMore() {
+        if (loadingMore || !hasMore) return;
+        loadingMore = true;
+        const nextPage = scrollPage + 1;
+        try {
+            const res = await fetch(`/users/${profileUser.id}/posts.json?tab=${activeTab}&page=${nextPage}`, {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            if (!res.ok) throw new Error('fetch failed');
+            const result = await res.json();
+            const ids = new Set(allPosts.map((p: any) => p.id));
+            allPosts = [...allPosts, ...result.data.filter((p: any) => !ids.has(p.id))];
+            scrollPage = result.current_page;
+            hasMore = result.current_page < result.last_page;
+        } catch {
+            // silently ignore
+        } finally {
+            loadingMore = false;
+        }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     function switchTab(tab: string) {
         router.get(`/users/${profileUser.id}`, { tab }, { preserveScroll: true, only: ['posts', 'activeTab'], replace: true });
@@ -44,7 +98,6 @@
                 <a href="/dashboard" class="p-5 rounded-full w-fit transition-colors" aria-label="Home">
                     <img src="/images/Y-dark-remove.png" alt="Y" class="h-9 w-9 object-contain dark:invert-0 invert" />
                 </a>
-                <AnimatedThemeToggler class="p-3 rounded-full transition-colors text-gray-900 dark:text-white" />
             </div>
 
             <nav class="flex flex-col gap-1 w-full mt-2">
@@ -136,12 +189,20 @@
                         Edit profile
                     </a>
                 {:else}
-                    <button
-                        onclick={() => router.post(`/users/${profileUser.id}/follow`, {}, { preserveScroll: true, only: ['isFollowing'] })}
-                        class="bg-gray-900 dark:bg-white text-white dark:text-black font-bold rounded-full px-4 py-1.5 text-sm hover:bg-gray-700 dark:hover:bg-neutral-200 transition-colors"
-                    >
-                        {isFollowing ? 'Following' : 'Follow'}
-                    </button>
+                    <div class="flex gap-2">
+                        <button
+                            onclick={() => router.post(findOrCreateConversation(profileUser.id).url)}
+                            class="border border-neutral-300 dark:border-neutral-700 font-bold rounded-full px-4 py-1.5 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors"
+                        >
+                            Message
+                        </button>
+                        <button
+                            onclick={() => router.post(`/users/${profileUser.id}/follow`, {}, { preserveScroll: true, only: ['isFollowing'] })}
+                            class="bg-gray-900 dark:bg-white text-white dark:text-black font-bold rounded-full px-4 py-1.5 text-sm hover:bg-gray-700 dark:hover:bg-neutral-200 transition-colors"
+                        >
+                            {isFollowing ? 'Following' : 'Follow'}
+                        </button>
+                    </div>
                 {/if}
             </div>
 
@@ -176,7 +237,7 @@
 
         <!-- Posts tab -->
         {#if activeTab === 'posts'}
-            {#each posts.data as post}
+            {#each allPosts as post}
                 <div class="relative flex flex-col gap-1 border-b border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-950 transition-colors">
                     <a href="/posts/{post.id}" class="flex flex-col gap-1 px-4 py-4 {isOwnProfile ? 'pr-12' : ''}">
                         {#if post.image_url}
@@ -225,7 +286,7 @@
 
         <!-- Replies tab -->
         {:else}
-            {#each posts.data as reply}
+            {#each allPosts as reply}
                 <div class="relative flex flex-col gap-1 px-4 py-4 border-b border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-950 transition-colors">
                     <a href="/posts/{reply.parent_post_id}" class="flex flex-col gap-1">
                         {#if reply.parent}
@@ -272,30 +333,26 @@
             {/if}
         {/if}
 
-        {#if posts.last_page > 1}
-            <div class="py-4">
-                <Pagination
-                    count={posts.total}
-                    perPage={posts.per_page}
-                    page={posts.current_page}
-                    onPageChange={(p) => router.get(`/users/${profileUser.id}`, { page: p }, { preserveScroll: true, only: ['posts'], replace: true })}
-                >
-                    {#snippet children({ pages, currentPage: cp })}
-                        <PaginationContent>
-                            <PaginationItem><PaginationPrevious /></PaginationItem>
-                            {#each pages as pg (pg.key)}
-                                {#if pg.type === 'ellipsis'}
-                                    <PaginationItem><PaginationEllipsis /></PaginationItem>
-                                {:else}
-                                    <PaginationItem><PaginationLink page={pg} isActive={cp === pg.value} /></PaginationItem>
-                                {/if}
-                            {/each}
-                            <PaginationItem><PaginationNext /></PaginationItem>
-                        </PaginationContent>
-                    {/snippet}
-                </Pagination>
+        <!-- Infinite scroll sentinel + loading indicator -->
+        <div bind:this={sentinel} class="h-1"></div>
+        {#if loadingMore}
+            <div class="py-6 flex justify-center">
+                <div class="flex gap-1.5">
+                    <span class="w-2 h-2 bg-neutral-400 dark:bg-neutral-600 rounded-full animate-bounce" style="animation-delay:0ms"></span>
+                    <span class="w-2 h-2 bg-neutral-400 dark:bg-neutral-600 rounded-full animate-bounce" style="animation-delay:150ms"></span>
+                    <span class="w-2 h-2 bg-neutral-400 dark:bg-neutral-600 rounded-full animate-bounce" style="animation-delay:300ms"></span>
+                </div>
             </div>
+        {:else if !hasMore && allPosts.length > 0}
+            <p class="py-6 text-center text-neutral-400 text-sm">All posts loaded ✓</p>
         {/if}
 
     </main>
+
+    <!-- Right toggles -->
+    <div class="hidden lg:block pt-3 pl-4">
+        <div class="sticky top-3">
+            <HeaderToggles />
+        </div>
+    </div>
 </div>

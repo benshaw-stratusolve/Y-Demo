@@ -5,7 +5,8 @@
     import { destroy as logout } from '@/actions/Laravel/Fortify/Http/Controllers/AuthenticatedSessionController';
     import { destroy as destroyPost, like as likePost, reply as replyToPost, show as showPost, store as storePost } from '@/actions/App/Http/Controllers/PostController';
     import AnimatedThemeToggler from '@/components/animated-theme-toggler/AnimatedThemeToggler.svelte';
-    import { Home, Search, Bell, BellOff, Sparkles, User, Feather, ImagePlus, X, Shield } from 'lucide-svelte';
+    import { Home, Search, Bell, BellOff, Sparkles, User, Feather, ImagePlus, X, Shield, MessageSquare } from 'lucide-svelte';
+    import { index as messagesIndex } from '@/actions/App/Http/Controllers/MessagesController';
     import SearchOverlay from '@/components/search-overlay/SearchOverlay.svelte';
     import { isSoundEnabled, setSoundEnabled } from '@/lib/notification-sounds';
     import AnimatedNotificationList from '@/components/animated-notification/AnimatedNotificationList.svelte';
@@ -211,6 +212,9 @@
     const unreadCount = $derived(
         ((page.props as any).unread_notifications_count as number ?? 0) + realtimeStore.liveUnreadIncrement
     );
+    const unreadMessagesCount = $derived(
+        ((page.props as any).unread_messages_count as number ?? 0) + realtimeStore.unreadMessagesIncrement
+    );
 
     let notifBadgeEl = $state<HTMLElement | null>(null);
     let prevUnreadCount = $state(0);
@@ -350,6 +354,7 @@
                 {#each [
                     { label: 'Home', icon: Home, href: '/dashboard' },
                     { label: 'Notifications', icon: Bell, href: '/notifications' },
+                    { label: 'Messages', icon: MessageSquare, href: messagesIndex().url },
                     { label: 'Flok', icon: Sparkles, href: '/flock-ai' },
                     { label: 'Profile', icon: User, href: `/users/${auth?.user?.id}` },
                 ] as item}
@@ -370,6 +375,13 @@
                                 <Icon class="w-6 h-6" />
                                 {#if unreadCount > 0}
                                     <span bind:this={notifBadgeEl} class="absolute -top-1 -right-1 min-w-[16px] h-4 bg-blue-500 rounded-full text-white text-[9px] font-bold flex items-center justify-center px-0.5">{unreadCount > 99 ? '99+' : unreadCount}</span>
+                                {/if}
+                            </div>
+                        {:else if item.label === 'Messages'}
+                            <div class="relative">
+                                <Icon class="w-6 h-6" />
+                                {#if unreadMessagesCount > 0}
+                                    <span class="absolute -top-1 -right-1 min-w-[16px] h-4 bg-blue-500 rounded-full text-white text-[9px] font-bold flex items-center justify-center px-0.5">{unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}</span>
                                 {/if}
                             </div>
                         {:else}
