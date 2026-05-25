@@ -28,6 +28,8 @@ let newMessages = $state<Record<number, MessageType[]>>({});
 let typingConversations = $state<Set<number>>(new Set());
 let unreadMessagesIncrement = $state(0);
 
+const typingTimeouts = new Map<number, ReturnType<typeof setTimeout>>();
+
 let activeChannel: ReturnType<typeof echo.private> | null = null;
 let activeUserId: number | null = null;
 
@@ -58,12 +60,17 @@ function subscribeToUser(userId: number): void {
             unreadMessagesIncrement += 1;
         })
         .listen('.UserTyping', (e: { conversation_id: number }) => {
-            typingConversations = new Set([...typingConversations, e.conversation_id]);
-            setTimeout(() => {
+            const convId = e.conversation_id;
+            typingConversations = new Set([...typingConversations, convId]);
+            if (typingTimeouts.has(convId)) {
+                clearTimeout(typingTimeouts.get(convId)!);
+            }
+            typingTimeouts.set(convId, setTimeout(() => {
                 typingConversations = new Set(
-                    [...typingConversations].filter((id) => id !== e.conversation_id)
+                    [...typingConversations].filter((id) => id !== convId)
                 );
-            }, 3000);
+                typingTimeouts.delete(convId);
+            }, 3000));
         });
 }
 
@@ -80,6 +87,8 @@ function unsubscribeFromUser(): void {
     deletedPostIds = new Set();
     newMessages = {};
     typingConversations = new Set();
+    typingTimeouts.forEach((t) => clearTimeout(t));
+    typingTimeouts.clear();
     unreadMessagesIncrement = 0;
 }
 
