@@ -16,7 +16,7 @@ class MessageFactory extends Factory
     {
         return [
             'conversation_id' => Conversation::factory(),
-            'user_id' => User::factory(),
+            'sender_id' => User::factory(),
             'body' => fake()->sentence(),
             'read_at' => null,
         ];

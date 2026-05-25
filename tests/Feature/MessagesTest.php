@@ -1,7 +1,6 @@
 <?php
 
 use App\Models\Conversation;
-use App\Models\Message;
 use App\Models\User;
 
 it('creates a canonical conversation between two users', function () {
@@ -44,4 +43,19 @@ it('counts unread messages correctly', function () {
 
     expect($conv->unreadCount($userB->id))->toBe(2);
     expect($conv->unreadCount($userA->id))->toBe(0);
+});
+
+it('counts total unread messages for a user across all conversations', function () {
+    $userA = User::factory()->create();
+    $userB = User::factory()->create();
+    $userC = User::factory()->create();
+
+    $conv1 = Conversation::findOrCreateBetween($userA->id, $userB->id);
+    $conv2 = Conversation::findOrCreateBetween($userA->id, $userC->id);
+
+    $conv1->messages()->create(['sender_id' => $userB->id, 'body' => 'Hi from B']);
+    $conv2->messages()->create(['sender_id' => $userC->id, 'body' => 'Hi from C']);
+
+    expect($userA->unreadMessagesCount())->toBe(2);
+    expect($userB->unreadMessagesCount())->toBe(0);
 });
