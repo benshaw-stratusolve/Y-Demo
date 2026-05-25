@@ -18,7 +18,7 @@
     import BanModal from '@/components/BanModal.svelte';
     import { charCounterClass, showCharCounter } from '@/lib/char-counter';
     import { realtimeStore } from '@/lib/realtime.svelte';
-    import { animatePostIn, animatePostsStagger, animatePostOut } from '@/lib/anime-utils';
+    import { animatePostIn, animatePostsStagger, animatePostOut, animateLikePulse, animateBadgeBounce, animateTabTransition } from '@/lib/anime-utils';
 
     let searchOpen = $state(false);
     let soundEnabled = $state(isSoundEnabled());
@@ -187,7 +187,18 @@
     // ─────────────────────────────────────────────────────────────────────────
 
     function switchTab(tab: string) {
-        router.get('/dashboard', { tab }, { preserveScroll: true, replace: true, only: ['posts', 'activeTab'] });
+        if (tab === activeTab) return;
+        const direction = tabs.findIndex((t: any) => t.id === tab) > tabs.findIndex((t: any) => t.id === activeTab)
+            ? 'left'
+            : 'right';
+        router.get('/dashboard', { tab }, {
+            preserveScroll: true,
+            replace: true,
+            only: ['posts', 'activeTab'],
+            onSuccess: () => {
+                if (feedContainerEl) animateTabTransition(feedContainerEl, direction);
+            },
+        });
     }
 
     const FOLLOWING_PER_PAGE = 10;
@@ -200,6 +211,18 @@
     const unreadCount = $derived(
         ((page.props as any).unread_notifications_count as number ?? 0) + realtimeStore.liveUnreadIncrement
     );
+
+    let notifBadgeEl = $state<HTMLElement | null>(null);
+    let prevUnreadCount = $state(0);
+    let feedContainerEl = $state<HTMLElement | null>(null);
+
+    $effect(() => {
+        const count = unreadCount;
+        if (count > prevUnreadCount && notifBadgeEl) {
+            animateBadgeBounce(notifBadgeEl);
+        }
+        prevUnreadCount = count;
+    });
 
     function submitPost() {
         if (!postBody.trim() && !postImage) { return; }
@@ -218,7 +241,8 @@
         });
     }
 
-    function toggleLike(post: any) {
+    function toggleLike(post: any, heartBtn?: HTMLElement) {
+        if (heartBtn) animateLikePulse(heartBtn);
         const liked = localLikes[post.id]?.liked ?? post.liked_by_user;
         const count = localLikes[post.id]?.count ?? post.likes_count;
         localLikes[post.id] = { liked: !liked, count: count + (liked ? -1 : 1) };
@@ -345,7 +369,7 @@
                             <div class="relative">
                                 <Icon class="w-6 h-6" />
                                 {#if unreadCount > 0}
-                                    <span class="absolute -top-1 -right-1 min-w-[16px] h-4 bg-blue-500 rounded-full text-white text-[9px] font-bold flex items-center justify-center px-0.5">{unreadCount > 99 ? '99+' : unreadCount}</span>
+                                    <span bind:this={notifBadgeEl} class="absolute -top-1 -right-1 min-w-[16px] h-4 bg-blue-500 rounded-full text-white text-[9px] font-bold flex items-center justify-center px-0.5">{unreadCount > 99 ? '99+' : unreadCount}</span>
                                 {/if}
                             </div>
                         {:else}
@@ -518,7 +542,7 @@
         </div>
 
         <!-- Posts -->
-        <div>
+        <div bind:this={feedContainerEl}>
             {#if isDiscoveryFeed}
                 <div class="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800 bg-blue-50/50 dark:bg-blue-950/20">
                     <p class="text-[13px] font-semibold text-blue-500">✦ Discover Y</p>
@@ -583,7 +607,7 @@
                             <button
                                 type="button"
                                 class="flex items-center gap-2 transition-colors group hover:text-pink-500 {(localLikes[post.id]?.liked ?? post.liked_by_user) ? 'text-pink-500' : ''}"
-                                onclick={() => toggleLike(post)}
+                                onclick={(e) => toggleLike(post, e.currentTarget as HTMLElement)}
                             >
                                 <div class="p-2 group-hover:bg-pink-500/10 rounded-full -m-2 mr-0">{(localLikes[post.id]?.liked ?? post.liked_by_user) ? '❤️' : '🤍'}</div>
                                 {localLikes[post.id]?.count ?? realtimeStore.postCounts[post.id]?.likes_count ?? post.likes_count ?? 0}
