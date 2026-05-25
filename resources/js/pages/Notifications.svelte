@@ -12,15 +12,7 @@
     import HeaderToggles from '@/components/HeaderToggles.svelte';
     import { clearAll } from '@/actions/App/Http/Controllers/NotificationsController';
     import { Badge } from '@/components/ui/badge';
-
-    type Notification = {
-        id: string;
-        type: string;
-        data: Record<string, any>;
-        read: boolean;
-        created_at: string;
-        is_following_actor: boolean;
-    };
+    import type { Notification } from '@/types/notifications';
 
     let { notifications: initialNotifications, unread_count }: { notifications: Notification[]; unread_count: number } = $props();
     let allNotifications = $state<Notification[]>([...initialNotifications]);
