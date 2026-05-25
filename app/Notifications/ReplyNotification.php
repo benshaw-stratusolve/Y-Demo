@@ -2,23 +2,20 @@
 
 namespace App\Notifications;
 
+use App\Concerns\BroadcastsNotification;
 use App\Models\User;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Notifications\Notification;
 
-class ReplyNotification extends Notification
+class ReplyNotification extends Notification implements ShouldBroadcast
 {
-    use Queueable;
+    use Queueable, BroadcastsNotification;
 
     public function __construct(
         public User $actor,
         public string $replyExcerpt,
     ) {}
-
-    public function via(object $notifiable): array
-    {
-        return ['database'];
-    }
 
     public function toArray(object $notifiable): array
     {
