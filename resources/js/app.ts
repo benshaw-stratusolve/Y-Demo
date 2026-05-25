@@ -77,6 +77,7 @@ if (appEl?.dataset.page) {
 }
 
 // Every subsequent Inertia navigation
+// Intentionally not cleaned up — lives for the full SPA lifetime.
 router.on('navigate', (event) => {
     syncRealtimeUser((event.detail.page.props as Record<string, any>));
 });
