@@ -21,6 +21,7 @@ class MessagesController extends Controller
             'conversations' => $this->conversationsList(),
             'activeConversation' => null,
             'messages' => null,
+            'followingUsers' => $this->followingUsers(),
         ]);
     }
 
@@ -71,6 +72,7 @@ class MessagesController extends Controller
                 ],
             ],
             'messages' => $messages,
+            'followingUsers' => $this->followingUsers(),
         ]);
     }
 
@@ -130,6 +132,23 @@ class MessagesController extends Controller
         }
 
         return response()->json(['ok' => true]);
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function followingUsers(): array
+    {
+        return auth()->user()
+            ->followingUsers()
+            ->select('users.id', 'users.name', 'users.username', 'users.avatar_url')
+            ->orderBy('users.name')
+            ->get()
+            ->map(fn (User $user) => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'username' => $user->username,
+                'avatar_url' => $user->avatar_url,
+            ])
+            ->all();
     }
 
     /** @return array<int, array<string, mixed>> */

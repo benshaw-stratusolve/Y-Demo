@@ -9,7 +9,8 @@
     import { animateMessageBubble, startTypingDots } from '@/lib/anime-utils';
     import { destroy as logout } from '@/actions/Laravel/Fortify/Http/Controllers/AuthenticatedSessionController';
     import { index as messagesIndex, show as showConversation, store as sendMessage, typing as sendTyping } from '@/actions/App/Http/Controllers/MessagesController';
-    import { Home, Bell, Sparkles, User, Send, MessageSquare, ArrowLeft } from 'lucide-svelte';
+    import { Home, Bell, Sparkles, User, Send, MessageSquare, ArrowLeft, SquarePen, Search, X } from 'lucide-svelte';
+    import { findOrCreate as findOrCreateConversation } from '@/actions/App/Http/Controllers/MessagesController';
     import AnimatedGradientText from '@/components/AnimatedGradientText.svelte';
     import { Badge } from '@/components/ui/badge';
 
@@ -36,10 +37,12 @@
         conversations,
         activeConversation = null,
         messages = null,
+        followingUsers = [],
     }: {
         conversations: ConversationItem[];
         activeConversation: { id: number; other_user: OtherUser } | null;
         messages: MessageItem[] | null;
+        followingUsers: OtherUser[];
     } = $props();
 
     const auth = $derived(page.props.auth as any);
@@ -55,6 +58,26 @@
     let messagesContainer = $state<HTMLElement | null>(null);
     let typingTimer: ReturnType<typeof setTimeout> | null = null;
     let optimisticIdCounter = 0;
+
+    let composeOpen = $state(false);
+    let composeSearch = $state('');
+
+    const filteredFollowing = $derived(
+        followingUsers.filter(u =>
+            u.name.toLowerCase().includes(composeSearch.toLowerCase()) ||
+            u.username.toLowerCase().includes(composeSearch.toLowerCase())
+        )
+    );
+
+    function openCompose() {
+        composeSearch = '';
+        composeOpen = true;
+    }
+
+    function startConversation(userId: number) {
+        composeOpen = false;
+        router.post(findOrCreateConversation(userId).url);
+    }
 
     $effect(() => {
         return () => {
@@ -242,7 +265,16 @@
     <div class="w-full sm:w-[350px] border-x border-neutral-200 dark:border-neutral-800 min-h-screen flex flex-col {activeConversation ? 'hidden sm:flex' : 'flex'}">
         <div class="sticky top-0 bg-white/80 dark:bg-black/80 backdrop-blur-md z-10 border-b border-neutral-200 dark:border-neutral-800 px-4 py-3 flex items-center justify-between">
             <h1 class="font-extrabold text-xl">Messages</h1>
-            <AnimatedThemeToggler class="p-2 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors" />
+            <div class="flex items-center gap-1">
+                <button
+                    onclick={openCompose}
+                    class="p-2 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors"
+                    aria-label="New message"
+                >
+                    <SquarePen class="w-5 h-5" />
+                </button>
+                <AnimatedThemeToggler class="p-2 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors" />
+            </div>
         </div>
 
         {#if conversations.length === 0}
@@ -372,6 +404,85 @@
     {/if}
 
 </div>
+
+<!-- Compose modal -->
+{#if composeOpen}
+    <!-- svelte-ignore a11y_click_outside -->
+    <div
+        class="fixed inset-0 z-50 flex items-start justify-center pt-16 px-4"
+        role="dialog"
+        aria-modal="true"
+        aria-label="New message"
+    >
+        <!-- Backdrop -->
+        <button
+            class="absolute inset-0 bg-black/40 dark:bg-black/60"
+            onclick={() => composeOpen = false}
+            aria-label="Close"
+            tabindex="-1"
+        ></button>
+
+        <!-- Modal -->
+        <div class="relative bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <!-- Header -->
+            <div class="flex items-center justify-between px-5 py-4 border-b border-neutral-200 dark:border-neutral-800">
+                <h2 class="font-extrabold text-lg">New Message</h2>
+                <button
+                    onclick={() => composeOpen = false}
+                    class="p-1.5 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                    aria-label="Close"
+                >
+                    <X class="w-5 h-5" />
+                </button>
+            </div>
+
+            <!-- Search -->
+            <div class="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800">
+                <div class="flex items-center gap-2 bg-neutral-100 dark:bg-neutral-800 rounded-full px-4 py-2">
+                    <Search class="w-4 h-4 text-neutral-400 shrink-0" />
+                    <input
+                        type="text"
+                        bind:value={composeSearch}
+                        placeholder="Search people you follow"
+                        class="flex-1 bg-transparent text-[15px] outline-none placeholder-neutral-400"
+                        autofocus
+                    />
+                    {#if composeSearch}
+                        <button onclick={() => composeSearch = ''} class="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200">
+                            <X class="w-3.5 h-3.5" />
+                        </button>
+                    {/if}
+                </div>
+            </div>
+
+            <!-- User list -->
+            <div class="overflow-y-auto max-h-80">
+                {#if followingUsers.length === 0}
+                    <div class="px-5 py-10 text-center text-neutral-500 text-sm">
+                        You're not following anyone yet.
+                    </div>
+                {:else if filteredFollowing.length === 0}
+                    <div class="px-5 py-10 text-center text-neutral-500 text-sm">
+                        No results for "{composeSearch}"
+                    </div>
+                {:else}
+                    {#each filteredFollowing as user (user.id)}
+                        <button
+                            onclick={() => startConversation(user.id)}
+                            class="w-full flex items-center gap-3 px-5 py-3 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors text-left"
+                        >
+                            <UserAvatar {user} />
+                            <div class="min-w-0">
+                                <p class="font-bold text-[15px] truncate">{user.name}</p>
+                                <p class="text-neutral-500 text-sm truncate">@{user.username}</p>
+                            </div>
+                        </button>
+                    {/each}
+                {/if}
+            </div>
+        </div>
+    </div>
+{/if}
 
 <style>
     :global(::-webkit-scrollbar) { width: 6px; }
