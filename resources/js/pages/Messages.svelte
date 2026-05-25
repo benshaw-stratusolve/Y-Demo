@@ -6,6 +6,7 @@
     import UserAvatar from '@/components/UserAvatar.svelte';
     import AnimatedThemeToggler from '@/components/animated-theme-toggler/AnimatedThemeToggler.svelte';
     import { realtimeStore } from '@/lib/realtime.svelte';
+    import { animateMessageBubble, startTypingDots } from '@/lib/anime-utils';
     import { destroy as logout } from '@/actions/Laravel/Fortify/Http/Controllers/AuthenticatedSessionController';
     import { index as messagesIndex, show as showConversation, store as sendMessage, typing as sendTyping } from '@/actions/App/Http/Controllers/MessagesController';
     import { Home, Bell, Sparkles, User, Send, MessageSquare, ArrowLeft } from 'lucide-svelte';
@@ -68,13 +69,23 @@
 
     const http = useHttp();
 
+    function typingDots(node: HTMLElement) {
+        const cancel = startTypingDots(node);
+        return { destroy: cancel };
+    }
+
+    function bubbleEnter(node: HTMLElement, opts: { isMine: boolean; isNew?: boolean }) {
+        if (opts.isNew) animateMessageBubble(node, opts.isMine);
+        return {};
+    }
+
     // Receive real-time messages
     $effect(() => {
         if (!activeConversation) return;
         const incoming = realtimeStore.newMessages[activeConversation.id];
         if (incoming?.length) {
             untrack(() => {
-                const msgs = realtimeStore.consumeNewMessages(activeConversation!.id);
+                const msgs = realtimeStore.consumeNewMessages(activeConversation!.id).map(m => ({ ...m, _isNew: true }));
                 allMessages = [...allMessages, ...msgs];
                 scrollToBottom();
             });
@@ -126,6 +137,7 @@
             sender: auth.user,
             created_at: 'just now',
             is_mine: true,
+            _isNew: true,
         };
         allMessages = [...allMessages, optimistic];
         scrollToBottom();
@@ -296,7 +308,10 @@
                     </div>
                 {:else}
                     {#each allMessages as msg (msg.id)}
-                        <div class="flex {msg.is_mine ? 'justify-end' : 'justify-start'} gap-2">
+                        <div
+                            use:bubbleEnter={{ isMine: msg.is_mine, isNew: msg._isNew ?? false }}
+                            class="flex {msg.is_mine ? 'justify-end' : 'justify-start'} gap-2"
+                        >
                             {#if !msg.is_mine}
                                 <UserAvatar user={msg.sender} size="xs" class="mt-1 shrink-0" />
                             {/if}
@@ -314,10 +329,13 @@
                     {#if isTyping}
                         <div class="flex justify-start gap-2">
                             <UserAvatar user={activeConversation.other_user} size="xs" class="mt-1 shrink-0" />
-                            <div class="bg-neutral-100 dark:bg-neutral-800 rounded-2xl rounded-bl-sm px-4 py-3 flex gap-1 items-center">
-                                <span class="w-2 h-2 bg-neutral-400 rounded-full animate-bounce" style="animation-delay:0ms"></span>
-                                <span class="w-2 h-2 bg-neutral-400 rounded-full animate-bounce" style="animation-delay:150ms"></span>
-                                <span class="w-2 h-2 bg-neutral-400 rounded-full animate-bounce" style="animation-delay:300ms"></span>
+                            <div
+                                use:typingDots
+                                class="bg-neutral-100 dark:bg-neutral-800 rounded-2xl rounded-bl-sm px-4 py-3 flex gap-1.5 items-center h-10"
+                            >
+                                <span class="typing-dot w-2 h-2 bg-neutral-400 rounded-full"></span>
+                                <span class="typing-dot w-2 h-2 bg-neutral-400 rounded-full"></span>
+                                <span class="typing-dot w-2 h-2 bg-neutral-400 rounded-full"></span>
                             </div>
                         </div>
                     {/if}
