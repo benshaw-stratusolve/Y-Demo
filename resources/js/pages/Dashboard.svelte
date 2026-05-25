@@ -1,21 +1,31 @@
 <script lang="ts">
     import { Deferred, page, router } from '@inertiajs/svelte';
+    import { untrack } from 'svelte';
     import AppHead from '@/components/AppHead.svelte';
     import { destroy as logout } from '@/actions/Laravel/Fortify/Http/Controllers/AuthenticatedSessionController';
     import { destroy as destroyPost, like as likePost, reply as replyToPost, show as showPost, store as storePost } from '@/actions/App/Http/Controllers/PostController';
     import AnimatedThemeToggler from '@/components/animated-theme-toggler/AnimatedThemeToggler.svelte';
-    import { Home, Search, Bell, Sparkles, User, Feather, ImagePlus, X, Shield } from 'lucide-svelte';
+    import { Home, Search, Bell, BellOff, Sparkles, User, Feather, ImagePlus, X, Shield } from 'lucide-svelte';
     import SearchOverlay from '@/components/search-overlay/SearchOverlay.svelte';
+    import { isSoundEnabled, setSoundEnabled } from '@/lib/notification-sounds';
     import AnimatedNotificationList from '@/components/animated-notification/AnimatedNotificationList.svelte';
     import AnimatedGradientText from '@/components/AnimatedGradientText.svelte';
     import UserAvatar from '@/components/UserAvatar.svelte';
     import { Badge } from '@/components/ui/badge';
+    import { Pagination, PaginationContent, PaginationItem, PaginationPrevious, PaginationNext, PaginationLink, PaginationEllipsis } from '@/components/ui/pagination';
     import CoolMode from '@/components/magic/cool-mode/cool-mode.svelte';
     import { notifications } from '@/lib/notifications.svelte';
     import BanModal from '@/components/BanModal.svelte';
-    import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationPrevious, PaginationNext, PaginationEllipsis } from '@/components/ui/pagination';
+    import { charCounterClass, showCharCounter } from '@/lib/char-counter';
+    import { realtimeStore } from '@/lib/realtime.svelte';
 
     let searchOpen = $state(false);
+    let soundEnabled = $state(isSoundEnabled());
+
+    function toggleSound() {
+        soundEnabled = !soundEnabled;
+        setSoundEnabled(soundEnabled);
+    }
     let openCommentId = $state<number | null>(null);
     let writingReplyId = $state<number | null>(null);
     let postModalOpen = $state(false);
@@ -66,8 +76,77 @@
         activeTab: string;
     } = $props();
 
+    // ── Infinite scroll ──────────────────────────────────────────────────────
+    let allPosts = $state<any[]>([...posts.data]);
+    let scrollPage = $state(1);
+    let hasMore = $state(posts.last_page > 1);
+    let loadingMore = $state(false);
+    let sentinel = $state<HTMLElement | null>(null);
+    let prevTab = activeTab;
+
+    // Merge Inertia-driven updates (tab switch or poll refresh) into allPosts
+    $effect(() => {
+        const data = posts.data;
+        const tab = activeTab;
+        untrack(() => {
+            if (tab !== prevTab) {
+                prevTab = tab;
+                allPosts = [...data];
+                scrollPage = 1;
+                hasMore = posts.last_page > 1;
+            } else {
+                // Poll refresh: merge fresh page-1 data at top, keep extras
+                const freshIds = new Set(data.map((p: any) => p.id));
+                const rest = allPosts.filter((p: any) => !freshIds.has(p.id));
+                allPosts = [...data, ...rest];
+            }
+        });
+    });
+
+    $effect(() => {
+        const incoming = realtimeStore.newPosts;
+        if (incoming.length > 0) {
+            untrack(() => {
+                allPosts = [...realtimeStore.consumeNewPosts(), ...allPosts];
+            });
+        }
+    });
+
+    // IntersectionObserver — load next page when sentinel enters viewport
+    $effect(() => {
+        if (!sentinel) return;
+        const obs = new IntersectionObserver(
+            ([entry]) => { if (entry.isIntersecting) loadMore(); },
+            { rootMargin: '400px' }
+        );
+        obs.observe(sentinel);
+        return () => obs.disconnect();
+    });
+
+    async function loadMore() {
+        if (loadingMore || !hasMore) return;
+        loadingMore = true;
+        const nextPage = scrollPage + 1;
+        try {
+            const res = await fetch(`/dashboard/posts.json?tab=${activeTab}&page=${nextPage}`, {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            if (!res.ok) throw new Error('fetch failed');
+            const result = await res.json();
+            const ids = new Set(allPosts.map((p: any) => p.id));
+            allPosts = [...allPosts, ...result.data.filter((p: any) => !ids.has(p.id))];
+            scrollPage = result.current_page;
+            hasMore = result.current_page < result.last_page;
+        } catch {
+            // silently ignore — user can scroll up/down to retry
+        } finally {
+            loadingMore = false;
+        }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     function switchTab(tab: string) {
-        router.get('/dashboard', { tab }, { preserveScroll: true, replace: true, only: ['activeTab'] });
+        router.get('/dashboard', { tab }, { preserveScroll: true, replace: true, only: ['posts', 'activeTab'] });
     }
 
     const FOLLOWING_PER_PAGE = 10;
@@ -77,7 +156,9 @@
     );
 
     const auth = $derived(page.props.auth as any);
-    const unreadCount = $derived((page.props as any).unread_notifications_count as number ?? 0);
+    const unreadCount = $derived(
+        ((page.props as any).unread_notifications_count as number ?? 0) + realtimeStore.liveUnreadIncrement
+    );
 
     function submitPost() {
         if (!postBody.trim() && !postImage) { return; }
@@ -121,9 +202,18 @@
 
     let openMenuId = $state<number | null>(null);
 
+    const MAX_CHARS = 280;
+    const bodyCharsLeft = $derived(MAX_CHARS - postBody.length);
+    function replyCharsLeft(id: number) { return MAX_CHARS - (replyTexts[id]?.length ?? 0); }
+
     function deletePost(post: any) {
         openMenuId = null;
-        router.delete(destroyPost(post.id).url, { preserveScroll: true });
+        router.delete(destroyPost(post.id).url, {
+            preserveScroll: true,
+            onSuccess: () => {
+                notifications.add({ type: 'success', title: 'Post deleted', description: 'Your post has been removed.' });
+            },
+        });
     }
 
     function deleteReply(reply: any) {
@@ -147,9 +237,9 @@
                 writingReplyId = null;
                 notifications.add({ type: 'success', title: 'Comment posted!', description: 'Your comment has been added.' });
             },
-            onError: (errors: Record<string, string>) => {
-                if (errors.body) {
-                    notifications.add({ type: 'error', title: 'Error', description: errors.body });
+            onError: (errors) => {
+                if (errors.reply_limit) {
+                    notifications.add({ type: 'warning', title: 'Slow down', description: errors.reply_limit });
                 }
             },
         });
@@ -189,7 +279,6 @@
                 <a href="/dashboard" class="p-5 rounded-full w-fit transition-colors" aria-label="Home">
                     <img src="/images/Y-dark-remove.png" alt="Y" class="h-9 w-9 object-contain dark:invert-0 invert" />
                 </a>
-                <AnimatedThemeToggler class="p-3 rounded-full transition-colors text-gray-900 dark:text-white" />
             </div>
 
             <nav class="flex flex-col gap-1 w-full mt-2">
@@ -369,10 +458,15 @@
                         <ImagePlus class="w-5 h-5" />
                         <input type="file" accept="image/*" class="hidden" onchange={selectImage} />
                     </label>
+                    {#if showCharCounter(bodyCharsLeft)}
+                        <span class="text-xs font-semibold tabular-nums {charCounterClass(bodyCharsLeft)}">
+                            {bodyCharsLeft}
+                        </span>
+                    {/if}
                     <CoolMode>
                         <button
                             onclick={submitPost}
-                            disabled={!postBody.trim() && !postImage}
+                            disabled={(!postBody.trim() && !postImage) || bodyCharsLeft < 0}
                             class="bg-blue-500 text-white font-bold rounded-full py-1.5 px-4 text-sm transition-colors hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             Post
@@ -390,7 +484,7 @@
                     <p class="text-neutral-500 text-[13px] mt-0.5">Follow people to personalise your feed. Here's what's happening right now.</p>
                 </div>
             {/if}
-            {#each posts.data as post}
+            {#each allPosts as post}
                 <div
                     role="link"
                     tabindex="0"
@@ -440,7 +534,7 @@
                                 onclick={() => openCommentId = openCommentId === post.id ? null : post.id}
                             >
                                 <div class="p-2 group-hover:bg-blue-500/10 rounded-full -m-2 mr-0">💬</div>
-                                {post.replies_count ?? 0}
+                                {realtimeStore.postCounts[post.id]?.replies_count ?? post.replies_count ?? 0}
                             </button>
                             <button
                                 type="button"
@@ -448,7 +542,7 @@
                                 onclick={() => toggleLike(post)}
                             >
                                 <div class="p-2 group-hover:bg-pink-500/10 rounded-full -m-2 mr-0">{(localLikes[post.id]?.liked ?? post.liked_by_user) ? '❤️' : '🤍'}</div>
-                                {localLikes[post.id]?.count ?? post.likes_count ?? 0}
+                                {localLikes[post.id]?.count ?? realtimeStore.postCounts[post.id]?.likes_count ?? post.likes_count ?? 0}
                             </button>
                         </div>
                     </div>
@@ -499,10 +593,16 @@
                                     placeholder="Post your comment"
                                     class="w-full bg-transparent border border-neutral-200 dark:border-neutral-700 rounded-xl px-4 py-3 text-[15px] placeholder-neutral-400 outline-none focus:border-blue-500 resize-none transition-colors"
                                 ></textarea>
-                                <div class="flex justify-end mt-2">
+                                <div class="flex items-center justify-end gap-3 mt-2">
+                                    {#if showCharCounter(replyCharsLeft(post.id))}
+                                        {@const left = replyCharsLeft(post.id)}
+                                        <span class="text-xs font-semibold tabular-nums {charCounterClass(left)}">
+                                            {left}
+                                        </span>
+                                    {/if}
                                     <button
                                         onclick={() => submitReply(post)}
-                                        disabled={!(replyTexts[post.id] ?? '').trim()}
+                                        disabled={!(replyTexts[post.id] ?? '').trim() || replyCharsLeft(post.id) < 0}
                                         class="bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-full py-1.5 px-4 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         Comment
@@ -523,24 +623,18 @@
                 {/if}
             {/each}
         </div>
-        {#if posts.last_page > 1}
-            <div class="py-4 border-b border-neutral-200 dark:border-neutral-800">
-                <Pagination count={posts.total} perPage={posts.per_page} page={posts.current_page} onPageChange={(p) => router.get('/dashboard', { page: p }, { preserveScroll: true, replace: true })}>
-                    {#snippet children({ pages, currentPage: cp })}
-                        <PaginationContent>
-                            <PaginationItem><PaginationPrevious /></PaginationItem>
-                            {#each pages as pg (pg.key)}
-                                {#if pg.type === 'ellipsis'}
-                                    <PaginationItem><PaginationEllipsis /></PaginationItem>
-                                {:else}
-                                    <PaginationItem><PaginationLink page={pg} isActive={cp === pg.value} /></PaginationItem>
-                                {/if}
-                            {/each}
-                            <PaginationItem><PaginationNext /></PaginationItem>
-                        </PaginationContent>
-                    {/snippet}
-                </Pagination>
+        <!-- Infinite scroll sentinel + loading indicator -->
+        <div bind:this={sentinel} class="h-1"></div>
+        {#if loadingMore}
+            <div class="py-6 flex justify-center">
+                <div class="flex gap-1.5">
+                    <span class="w-2 h-2 bg-neutral-400 dark:bg-neutral-600 rounded-full animate-bounce" style="animation-delay:0ms"></span>
+                    <span class="w-2 h-2 bg-neutral-400 dark:bg-neutral-600 rounded-full animate-bounce" style="animation-delay:150ms"></span>
+                    <span class="w-2 h-2 bg-neutral-400 dark:bg-neutral-600 rounded-full animate-bounce" style="animation-delay:300ms"></span>
+                </div>
             </div>
+        {:else if !hasMore && allPosts.length > 0}
+            <p class="py-6 text-center text-neutral-400 text-sm">You're all caught up ✓</p>
         {/if}
         {/if}
     </main>
@@ -548,13 +642,28 @@
     <!-- Right sidebar -->
     <aside class="w-[350px] pl-8 py-2 hidden lg:block">
         <div class="sticky top-0 z-10 bg-white dark:bg-black pt-1 pb-2">
-            <button
-                onclick={() => searchOpen = true}
-                class="w-full bg-neutral-100 dark:bg-neutral-900 hover:bg-neutral-200 dark:hover:bg-neutral-800 rounded-full flex items-center px-4 py-2.5 transition-colors text-left"
-            >
-                <Search class="w-4 h-4 text-neutral-400 shrink-0" />
-                <span class="ml-4 text-[15px] text-neutral-400 dark:text-neutral-500">Search</span>
-            </button>
+            <div class="flex items-center gap-2">
+                <button
+                    onclick={() => searchOpen = true}
+                    class="flex-1 bg-neutral-100 dark:bg-neutral-900 hover:bg-neutral-200 dark:hover:bg-neutral-800 rounded-full flex items-center px-4 py-2.5 transition-colors text-left"
+                >
+                    <Search class="w-4 h-4 text-neutral-400 shrink-0" />
+                    <span class="ml-4 text-[15px] text-neutral-400 dark:text-neutral-500">Search</span>
+                </button>
+                <AnimatedThemeToggler class="p-2.5 rounded-full transition-colors text-gray-900 dark:text-white hover:bg-neutral-100 dark:hover:bg-neutral-900 shrink-0" />
+                <button
+                    onclick={toggleSound}
+                    class="p-2.5 rounded-full transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-900 shrink-0 {soundEnabled ? 'text-gray-900 dark:text-white' : 'text-neutral-400 dark:text-neutral-600'}"
+                    aria-label={soundEnabled ? 'Mute notification sounds' : 'Unmute notification sounds'}
+                    title={soundEnabled ? 'Mute notification sounds' : 'Unmute notification sounds'}
+                >
+                    {#if soundEnabled}
+                        <Bell class="w-5 h-5" />
+                    {:else}
+                        <BellOff class="w-5 h-5" />
+                    {/if}
+                </button>
+            </div>
         </div>
 
         <Deferred data={['trending', 'topAccounts']}>
@@ -666,9 +775,14 @@
                             <ImagePlus class="w-5 h-5" />
                             <input type="file" accept="image/*" class="hidden" onchange={selectImage} />
                         </label>
+                        {#if showCharCounter(bodyCharsLeft)}
+                            <span class="text-xs font-semibold tabular-nums {charCounterClass(bodyCharsLeft)}">
+                                {bodyCharsLeft}
+                            </span>
+                        {/if}
                         <button
                             onclick={submitPost}
-                            disabled={!postBody.trim() && !postImage}
+                            disabled={(!postBody.trim() && !postImage) || bodyCharsLeft < 0}
                             class="bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-full py-2 px-6 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             Post
