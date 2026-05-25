@@ -53,6 +53,13 @@
     let messageBody = $state('');
     let messagesContainer = $state<HTMLElement | null>(null);
     let typingTimer: ReturnType<typeof setTimeout> | null = null;
+    let optimisticIdCounter = 0;
+
+    $effect(() => {
+        return () => {
+            if (typingTimer) clearTimeout(typingTimer);
+        };
+    });
 
     const isTyping = $derived(
         activeConversation !== null &&
@@ -112,7 +119,7 @@
         messageBody = '';
 
         const optimistic: MessageItem = {
-            id: Date.now(),
+            id: -(++optimisticIdCounter),
             conversation_id: activeConversation.id,
             body,
             sender_id: auth.user.id,
