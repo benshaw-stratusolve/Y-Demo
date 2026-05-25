@@ -18,6 +18,7 @@
     import BanModal from '@/components/BanModal.svelte';
     import { charCounterClass, showCharCounter } from '@/lib/char-counter';
     import { realtimeStore } from '@/lib/realtime.svelte';
+    import { animatePostIn, animatePostsStagger } from '@/lib/anime-utils';
 
     let searchOpen = $state(false);
     let soundEnabled = $state(isSoundEnabled());
@@ -107,10 +108,36 @@
         const incoming = realtimeStore.newPosts;
         if (incoming.length > 0) {
             untrack(() => {
-                allPosts = [...realtimeStore.consumeNewPosts(), ...allPosts];
+                const fresh = realtimeStore.consumeNewPosts().map((p: any) => ({ ...p, _isNew: true }));
+                allPosts = [...fresh, ...allPosts];
             });
         }
     });
+
+    $effect(() => {
+        const deleted = realtimeStore.deletedPostIds;
+        if (deleted.size > 0) {
+            untrack(() => {
+                allPosts = allPosts.filter((p: any) => !deleted.has(p.id));
+            });
+        }
+    });
+
+    let hasMounted = $state(false);
+
+    $effect(() => {
+        if (hasMounted) return;
+        hasMounted = true;
+        const els = Array.from(
+            document.querySelectorAll<HTMLElement>('[data-post-id]')
+        );
+        if (els.length > 0) animatePostsStagger(els);
+    });
+
+    function postEnter(node: HTMLElement, isNew: boolean) {
+        if (isNew) animatePostIn(node);
+        return {};
+    }
 
     // IntersectionObserver — load next page when sentinel enters viewport
     $effect(() => {
@@ -486,6 +513,9 @@
             {/if}
             {#each allPosts as post}
                 <div
+                    id="post-{post.id}"
+                    data-post-id={post.id}
+                    use:postEnter={post._isNew ?? false}
                     role="link"
                     tabindex="0"
                     onclick={(event) => visitPost(event, post)}
