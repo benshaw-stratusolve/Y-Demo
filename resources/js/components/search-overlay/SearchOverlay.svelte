@@ -3,7 +3,6 @@
 	import { Search, X } from 'lucide-svelte';
 	import SearchController from '@/actions/App/Http/Controllers/SearchController';
 	import UserAvatar from '@/components/UserAvatar.svelte';
-	import { show as showPost } from '@/routes/posts';
 	import { show as showUser } from '@/routes/users';
 
 	type SearchUser = {
@@ -13,16 +12,9 @@
 		avatar_url?: string | null;
 	};
 
-	type SearchPost = {
-		id: number;
-		body: string;
-		user: SearchUser;
-	};
-
 	type SearchResults = {
 		query: string;
 		users: SearchUser[];
-		posts: SearchPost[];
 		suggestions: string[];
 	};
 
@@ -42,7 +34,7 @@
 	let activeRequestId = 0;
 
 	const trimmedQuery = $derived(query.trim());
-	const hasResults = $derived((results?.users.length ?? 0) > 0 || (results?.posts.length ?? 0) > 0);
+	const hasResults = $derived((results?.users.length ?? 0) > 0);
 
 	$effect(() => {
 		clearTimeout(debounceTimer);
@@ -189,17 +181,6 @@
 							</a>
 						{/each}
 
-						{#if results.posts.length > 0}
-							<p class="px-4 pt-4 pb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-								{trimmedQuery.length >= 2 ? 'Posts' : 'Recent posts'}
-							</p>
-						{/if}
-						{#each results.posts as post}
-							<a href={showPost(post.id).url} onclick={close} class="flex flex-col gap-1 border-t border-neutral-100 px-4 py-3 hover:bg-neutral-100 dark:border-neutral-800 dark:hover:bg-neutral-900">
-								<span class="text-sm font-semibold text-neutral-700 dark:text-neutral-300">{post.user.name} <span class="font-normal text-neutral-500">@{post.user.username ?? post.user.name}</span></span>
-								<span class="line-clamp-3 text-[15px] text-neutral-900 dark:text-neutral-100">{post.body}</span>
-							</a>
-						{/each}
 					{:else if trimmedQuery.length >= 2}
 						<div class="flex flex-col items-center justify-center px-4 py-10 text-center">
 							<p class="text-3xl mb-3">🔍</p>

@@ -12,6 +12,26 @@ test('registration screen can be rendered', function () {
     $response->assertOk();
 });
 
+test('username must be at least 3 characters at registration', function () {
+    $this->post(route('register.store'), [
+        'name' => 'Test User',
+        'username' => 'ab',
+        'email' => 'x@example.com',
+        'password' => 'P@ssword1',
+        'password_confirmation' => 'P@ssword1',
+    ])->assertSessionHasErrors('username');
+});
+
+test('username cannot contain special characters at registration', function () {
+    $this->post(route('register.store'), [
+        'name' => 'Test User',
+        'username' => 'ben shaw',
+        'email' => 'x@example.com',
+        'password' => 'P@ssword1',
+        'password_confirmation' => 'P@ssword1',
+    ])->assertSessionHasErrors('username');
+});
+
 test('new users can register', function () {
     $response = $this->post(route('register.store'), [
         'name' => 'Test User',

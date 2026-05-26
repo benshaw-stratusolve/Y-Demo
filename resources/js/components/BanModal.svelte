@@ -6,8 +6,7 @@
 
     $effect(() => {
         const errors = page.props.errors as Record<string, string> | undefined;
-        if (!errors) { return; }
-        const banError = Object.values(errors).find((e) => e.includes('banned'));
+        const banError = errors?.account_banned;
         if (banError) {
             message = banError;
             open = true;

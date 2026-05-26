@@ -9,6 +9,8 @@
     import { Badge } from '@/components/ui/badge';
     import { page, router } from '@inertiajs/svelte';
     import { destroy as destroyPost } from '@/actions/App/Http/Controllers/PostController';
+    import { animatePostOut } from '@/lib/anime-utils';
+    import { timeAgo } from '@/lib/time';
     import { findOrCreate as findOrCreateConversation } from '@/actions/App/Http/Controllers/MessagesController';
 
     let { profileUser, posts, isFollowing = false, isOwnProfile = false, activeTab = 'posts' }: {
@@ -20,6 +22,12 @@
     } = $props();
 
     let openMenuId = $state<number | null>(null);
+    let now = $state(new Date());
+
+    $effect(() => {
+        const t = setInterval(() => { now = new Date(); }, 60_000);
+        return () => clearInterval(t);
+    });
 
     // ── Infinite scroll ──────────────────────────────────────────────────────
     let allPosts = $state<any[]>([...posts.data]);
@@ -80,7 +88,9 @@
 
     function deleteReply(id: number) {
         openMenuId = null;
-        router.delete(destroyPost(id).url, { preserveScroll: true });
+        const el = document.getElementById(`reply-${id}`);
+        const doDelete = () => router.delete(destroyPost(id).url, { preserveScroll: true });
+        if (el) { animatePostOut(el, doDelete); } else { doDelete(); }
     }
 
     const auth = $derived(page.props.auth as any);
@@ -238,7 +248,7 @@
         <!-- Posts tab -->
         {#if activeTab === 'posts'}
             {#each allPosts as post}
-                <div class="relative flex flex-col gap-1 border-b border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-950 transition-colors">
+                <div id="reply-{post.id}" class="relative flex flex-col gap-1 border-b border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-950 transition-colors">
                     <a href="/posts/{post.id}" class="flex flex-col gap-1 px-4 py-4 {isOwnProfile ? 'pr-12' : ''}">
                         {#if post.image_url}
                             <div class="rounded-2xl overflow-hidden border border-neutral-200 dark:border-neutral-800 bg-neutral-950 shadow-sm flex items-center justify-center mb-2">
@@ -249,7 +259,7 @@
                         <div class="flex gap-5 text-neutral-500 text-[13px] mt-1">
                             <span>💬 {post.replies_count ?? 0}</span>
                             <span>❤️ {post.likes_count ?? 0}</span>
-                            <span class="ml-auto">{new Date(post.created_at).toLocaleDateString()}</span>
+                            <span class="ml-auto">{timeAgo(post.created_at, now)}</span>
                         </div>
                     </a>
 
@@ -287,7 +297,7 @@
         <!-- Replies tab -->
         {:else}
             {#each allPosts as reply}
-                <div class="relative flex flex-col gap-1 px-4 py-4 border-b border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-950 transition-colors">
+                <div id="reply-{reply.id}" class="relative flex flex-col gap-1 px-4 py-4 border-b border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-950 transition-colors">
                     <a href="/posts/{reply.parent_post_id}" class="flex flex-col gap-1">
                         {#if reply.parent}
                             <p class="text-neutral-500 text-[13px] truncate">
@@ -298,7 +308,7 @@
                         <p class="text-[15px] leading-normal mt-1">{reply.body}</p>
                         <div class="flex gap-5 text-neutral-500 text-[13px] mt-1">
                             <span>❤️ {reply.likes_count ?? 0}</span>
-                            <span class="ml-auto">{new Date(reply.created_at).toLocaleDateString()}</span>
+                            <span class="ml-auto">{timeAgo(reply.created_at, now)}</span>
                         </div>
                     </a>
 

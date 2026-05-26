@@ -19,6 +19,13 @@
     let allNotifications = $state<Notification[]>([...initialNotifications]);
 
     $effect(() => {
+        const notifications = initialNotifications;
+        untrack(() => {
+            allNotifications = [...notifications];
+        });
+    });
+
+    $effect(() => {
         const incoming = realtimeStore.incomingNotifications;
         if (incoming.length > 0) {
             untrack(() => {
@@ -46,6 +53,22 @@
 
     function handleMarkRead(id: string) {
         router.post(markRead({ id }).url, {}, { preserveScroll: true, only: ['notifications', 'unread_count'] });
+    }
+
+    function handleClearAll() {
+        const previousNotifications = [...allNotifications];
+
+        allNotifications = [];
+        selectedNotif = null;
+
+        router.delete(clearAll().url, {
+            preserveScroll: true,
+            preserveState: true,
+            only: ['notifications', 'unread_count'],
+            onError: () => {
+                allNotifications = previousNotifications;
+            },
+        });
     }
 
     function openNotif(notif: Notification) {
@@ -168,7 +191,7 @@
                 <h1 class="absolute left-0 right-0 text-center text-xl font-extrabold pointer-events-none">Notifications</h1>
                 {#if allNotifications.length > 0}
                     <button
-                        onclick={() => router.delete(clearAll().url, { preserveScroll: true })}
+                        onclick={handleClearAll}
                         class="ml-auto z-10 text-sm text-neutral-500 hover:text-red-500 transition-colors font-medium"
                     >
                         Clear all

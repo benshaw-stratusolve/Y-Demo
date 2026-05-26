@@ -18,15 +18,5 @@ export function initializeFlashToast(): void {
         });
     });
 
-    router.on('error', (event) => {
-        const errors = (event as CustomEvent).detail?.errors as Record<string, string> | undefined;
-        if (!errors) return;
 
-        const firstMessage = Object.values(errors)[0];
-        notifications.add({
-            type: 'error',
-            title: 'Something went wrong',
-            description: firstMessage,
-        });
-    });
 }

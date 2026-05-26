@@ -1,16 +1,33 @@
 # Jobs + Queues (ProcessPostImage)
 
-> How image processing is offloaded from the HTTP request cycle to a background worker using Laravel queues.
+> How background work is offloaded from the HTTP request cycle using Laravel queues — covering image processing and real-time broadcasts.
 
 ---
 
 ## Concept Explained
 
-A Laravel job is a class that implements `ShouldQueue`, meaning it runs asynchronously in a background process rather than during the HTTP request. The job is serialised and pushed onto a queue (database, Redis, etc.); a queue worker picks it up and runs it independently. The HTTP request completes immediately — the user doesn't wait for image processing.
+A Laravel job is a class that implements `ShouldQueue`, meaning it runs asynchronously in a background process rather than during the HTTP request. The job is serialised and pushed onto a queue (database, Redis, etc.); a queue worker picks it up and runs it independently. The HTTP request completes immediately — the user doesn't wait.
 
 ---
 
-## How it's Used in Y
+## Queue Configuration in Y
+
+```dotenv
+# .env
+QUEUE_CONNECTION=database
+```
+
+Jobs are stored in the `jobs` database table and processed by the queue worker included in `composer run dev`:
+
+```bash
+php artisan queue:listen --tries=1 --timeout=0
+```
+
+> **Note:** `QUEUE_CONNECTION` was originally `sync` (runs jobs inline in the HTTP request). It was changed to `database` after adding WebSocket broadcast jobs — with `sync`, a failed Reverb connection would return a 500 error to the user. With `database`, broadcast failures are isolated to the queue worker and don't affect HTTP responses.
+
+---
+
+## ProcessPostImage
 
 File: `app/Jobs/ProcessPostImage.php`
 
@@ -72,6 +89,16 @@ The post is saved with the original uploaded image path immediately. The job lat
 
 ---
 
+## Queued Jobs in Y
+
+| Job / Notification | What it does |
+|---|---|
+| `ProcessPostImage` | Resize + compress uploaded post image |
+| `BroadcastEvent` (auto) | Pushes `PostBroadcast` / `PostInteractionUpdated` to Reverb |
+| `SendQueuedNotifications` (auto) | Delivers `LikeNotification`, `FollowNotification`, etc. to DB + Reverb |
+
+---
+
 ## Key Code Snippet
 
 ```php
@@ -85,12 +112,13 @@ Image::read($path)
 
 ## Why This Approach
 
-Image processing (reading, resizing, re-encoding) can take 100–500ms or more for large files. Doing this synchronously during the HTTP request would make post creation feel slow. Offloading to a queue keeps the response fast. The existence check at the start of `handle()` handles race conditions where the post (and image) might be deleted before the job runs.
+Image processing (reading, resizing, re-encoding) can take 100–500ms or more for large files. Doing this synchronously during the HTTP request would make post creation feel slow. Offloading to a queue keeps the response fast. The existence check at the start of `handle()` handles race conditions where the post (and image) might be deleted before the job runs. The `database` queue driver needs no extra infrastructure (Redis, etc.) — perfect for a local demo app.
 
 ---
 
 ## Related Notes
 
 - [[Intervention Image]]
+- [[Laravel Reverb (WebSockets)]]
 - [[Posts (replies + reposts)]]
 - [[Events + Listeners]]

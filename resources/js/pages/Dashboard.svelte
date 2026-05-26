@@ -1,6 +1,6 @@
 <script lang="ts">
     import { Deferred, page, router } from '@inertiajs/svelte';
-    import { untrack } from 'svelte';
+    import { tick, untrack } from 'svelte';
     import AppHead from '@/components/AppHead.svelte';
     import { destroy as logout } from '@/actions/Laravel/Fortify/Http/Controllers/AuthenticatedSessionController';
     import { destroy as destroyPost, like as likePost, reply as replyToPost, show as showPost, store as storePost } from '@/actions/App/Http/Controllers/PostController';
@@ -20,9 +20,16 @@
     import { charCounterClass, showCharCounter } from '@/lib/char-counter';
     import { realtimeStore } from '@/lib/realtime.svelte';
     import { animatePostIn, animatePostsStagger, animatePostOut, animateLikePulse, animateBadgeBounce, animateTabTransition } from '@/lib/anime-utils';
+    import { timeAgo } from '@/lib/time';
 
     let searchOpen = $state(false);
     let soundEnabled = $state(isSoundEnabled());
+    let now = $state(new Date());
+
+    $effect(() => {
+        const t = setInterval(() => { now = new Date(); }, 60_000);
+        return () => clearInterval(t);
+    });
 
     function toggleSound() {
         soundEnabled = !soundEnabled;
@@ -86,6 +93,39 @@
     let sentinel = $state<HTMLElement | null>(null);
     let prevTab = activeTab;
 
+    type FeedAnchor = { id: string; top: number } | null;
+
+    function captureFeedAnchor(): FeedAnchor {
+        if (window.scrollY < 160) {
+            return null;
+        }
+
+        const visiblePost = Array.from(document.querySelectorAll<HTMLElement>('[data-post-id]'))
+            .find((el) => el.getBoundingClientRect().bottom > 88);
+
+        return visiblePost?.dataset.postId
+            ? { id: visiblePost.dataset.postId, top: visiblePost.getBoundingClientRect().top }
+            : null;
+    }
+
+    async function restoreFeedAnchor(anchor: FeedAnchor): Promise<void> {
+        if (!anchor) {
+            return;
+        }
+
+        await tick();
+
+        const anchoredPost = document.querySelector<HTMLElement>(`[data-post-id="${anchor.id}"]`);
+        if (!anchoredPost) {
+            return;
+        }
+
+        const delta = anchoredPost.getBoundingClientRect().top - anchor.top;
+        if (Math.abs(delta) > 1) {
+            window.scrollBy(0, delta);
+        }
+    }
+
     // Merge Inertia-driven updates (tab switch or poll refresh) into allPosts
     $effect(() => {
         const data = posts.data;
@@ -111,8 +151,19 @@
         const incoming = realtimeStore.newPosts;
         if (incoming.length > 0) {
             untrack(() => {
-                const fresh = realtimeStore.consumeNewPosts().map((p: any) => ({ ...p, _isNew: true }));
+                const anchor = captureFeedAnchor();
+                const existingIds = new Set(allPosts.map((p: any) => p.id));
+                const fresh = realtimeStore
+                    .consumeNewPosts()
+                    .filter((p: any) => !existingIds.has(p.id))
+                    .map((p: any) => ({ ...p, _isNew: true }));
+
+                if (fresh.length === 0) {
+                    return;
+                }
+
                 allPosts = [...fresh, ...allPosts];
+                void restoreFeedAnchor(anchor);
             });
         }
     });
@@ -277,23 +328,27 @@
 
     function deletePost(post: any) {
         openMenuId = null;
-        router.delete(destroyPost(post.id).url, {
+        const el = document.getElementById(`post-${post.id}`);
+        const doDelete = () => router.delete(destroyPost(post.id).url, {
             preserveScroll: true,
             onSuccess: () => {
                 notifications.add({ type: 'success', title: 'Post deleted', description: 'Your post has been removed.' });
             },
         });
+        if (el) { animatePostOut(el, doDelete); } else { doDelete(); }
     }
 
     function deleteReply(reply: any) {
         openMenuId = null;
-        router.delete(destroyPost(reply.id).url, {
+        const el = document.getElementById(`reply-${reply.id}`);
+        const doDelete = () => router.delete(destroyPost(reply.id).url, {
             preserveScroll: true,
             preserveState: true,
             onSuccess: () => {
                 notifications.add({ type: 'info', title: 'Comment deleted', description: 'Your comment has been removed.' });
             },
         });
+        if (el) { animatePostOut(el, doDelete); } else { doDelete(); }
     }
 
     function submitReply(post: any) {
@@ -561,7 +616,7 @@
                     <p class="text-neutral-500 text-[13px] mt-0.5">Follow people to personalise your feed. Here's what's happening right now.</p>
                 </div>
             {/if}
-            {#each allPosts as post}
+            {#each allPosts as post (post.id)}
                 <div
                     id="post-{post.id}"
                     data-post-id={post.id}
@@ -577,7 +632,7 @@
                         <div class="flex items-center justify-between w-full">
                             <div class="flex items-center gap-1 text-[15px]">
                                 <span class="font-bold hover:underline">{post.user.name}</span>
-                                <span class="text-neutral-500">@{post.user.username} · {new Date(post.created_at).toLocaleDateString()}</span>
+                                <span class="text-neutral-500">@{post.user.username} · {timeAgo(post.created_at, now)}</span>
                             </div>
                             {#if post.user.id === auth?.user?.id}
                                 <div class="relative">
@@ -630,13 +685,13 @@
                 {#if openCommentId === post.id}
                     <div class="border-b border-neutral-200 dark:border-neutral-800">
                         <!-- Existing replies -->
-                        {#each post.replies ?? [] as reply}
-                            <div class="relative px-4 py-3 flex gap-3 border-t border-neutral-100 dark:border-neutral-900">
+                        {#each post.replies ?? [] as reply (reply.id)}
+                            <div id="reply-{reply.id}" class="relative px-4 py-3 flex gap-3 border-t border-neutral-100 dark:border-neutral-900">
                                 <UserAvatar user={reply.user} size="xs" />
                                 <div class="min-w-0 flex-1 pr-10">
                                     <div class="flex items-center gap-1 text-[13px]">
                                         <span class="font-bold">{reply.user.name}</span>
-                                        <span class="text-neutral-500">@{reply.user.username} · {new Date(reply.created_at).toLocaleDateString()}</span>
+                                        <span class="text-neutral-500">@{reply.user.username} · {timeAgo(reply.created_at, now)}</span>
                                     </div>
                                     <p class="text-[14px] leading-normal mt-0.5">{reply.body}</p>
                                 </div>
@@ -875,7 +930,7 @@
 {/if}
 
 <SearchOverlay bind:open={searchOpen} />
-<AnimatedNotificationList />
+<AnimatedNotificationList position="top" />
 
 {#if auth?.user?.banned_at}
     <div class="fixed inset-0 z-[100] flex items-center justify-center p-4">

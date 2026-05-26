@@ -4,7 +4,7 @@ use App\Models\User;
 
 test('unauthenticated user is redirected to admin login', function () {
     $this->get('/admin')
-        ->assertRedirect('/admin/login');
+        ->assertRedirect(route('login'));
 });
 
 test('non-admin user cannot access the admin panel', function () {

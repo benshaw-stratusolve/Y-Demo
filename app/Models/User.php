@@ -92,6 +92,16 @@ class User extends Authenticatable implements FilamentUser
         return $this->belongsToMany(Post::class, 'likes', 'user_id', 'post_id')->withTimestamps();
     }
 
+    public function mutedUsers(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'mutes', 'user_id', 'muted_user_id');
+    }
+
+    public function hasMuted(int $userId): bool
+    {
+        return $this->mutedUsers()->where('muted_user_id', $userId)->exists();
+    }
+
     public function unreadMessagesCount(): int
     {
         return Message::whereHas('conversation', function ($q) {

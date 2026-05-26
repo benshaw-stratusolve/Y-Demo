@@ -103,3 +103,141 @@ test('user cannot delete another users comment', function () {
 
     expect(Post::find($comment->id))->not->toBeNull();
 });
+
+test('banned user cannot create a post', function () {
+    $this->user->forceFill(['banned_at' => now()])->save();
+
+    $this->post('/posts', ['body' => 'Hello world'])
+        ->assertSessionHasErrors('account_banned');
+
+    expect($this->user->posts()->count())->toBe(0);
+});
+
+test('banned user cannot reply', function () {
+    $this->user->forceFill(['banned_at' => now()])->save();
+    $post = Post::factory()->create();
+
+    $this->post("/posts/{$post->id}/reply", ['body' => 'Hello'])
+        ->assertSessionHasErrors('account_banned');
+
+    expect(Post::where('parent_post_id', $post->id)->count())->toBe(0);
+});
+
+test('banned user cannot like a post', function () {
+    $this->user->forceFill(['banned_at' => now()])->save();
+    $post = Post::factory()->create();
+
+    $this->post("/posts/{$post->id}/like")
+        ->assertSessionHasErrors('account_banned');
+
+    expect(Like::where('user_id', $this->user->id)->where('post_id', $post->id)->exists())->toBeFalse();
+});
+
+test('banned user cannot repost', function () {
+    $this->user->forceFill(['banned_at' => now()])->save();
+    $post = Post::factory()->create();
+
+    $this->post("/posts/{$post->id}/repost")
+        ->assertSessionHasErrors('account_banned');
+
+    expect($this->user->posts()->where('repost_of_id', $post->id)->exists())->toBeFalse();
+});
+
+test('post body cannot exceed 280 characters', function () {
+    $this->post('/posts', ['body' => str_repeat('a', 281)])
+        ->assertSessionHasErrors('body');
+});
+
+test('reply body cannot exceed 280 characters', function () {
+    $post = Post::factory()->create();
+
+    $this->post("/posts/{$post->id}/reply", ['body' => str_repeat('a', 281)])
+        ->assertSessionHasErrors('body');
+});
+
+test('reply body is required', function () {
+    $post = Post::factory()->create();
+
+    $this->post("/posts/{$post->id}/reply", ['body' => ''])
+        ->assertSessionHasErrors('body');
+});
+
+test('user cannot post more than 5 comments within 5 minutes', function () {
+    $post = Post::factory()->create();
+
+    foreach (range(1, 5) as $i) {
+        $this->post("/posts/{$post->id}/reply", ['body' => "Comment {$i}"])
+            ->assertSessionHasNoErrors();
+    }
+
+    $this->post("/posts/{$post->id}/reply", ['body' => 'One too many'])
+        ->assertSessionHasErrors('reply_limit');
+});
+
+test('fifth comment is still allowed', function () {
+    $post = Post::factory()->create();
+
+    foreach (range(1, 4) as $i) {
+        $this->post("/posts/{$post->id}/reply", ['body' => "Comment {$i}"]);
+    }
+
+    $this->post("/posts/{$post->id}/reply", ['body' => 'Comment 5'])
+        ->assertSessionHasNoErrors();
+});
+
+test('show page returns other posts by the same author', function () {
+    $author = User::factory()->create();
+    $post = Post::factory()->create(['user_id' => $author->id, 'body' => 'Main post']);
+    $other = Post::factory()->create(['user_id' => $author->id, 'body' => 'Another post']);
+
+    $this->get("/posts/{$post->id}")
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('authorPosts', 1)
+            ->where('authorPosts.0.id', $other->id)
+        );
+});
+
+test('show page excludes the current post from author posts', function () {
+    $author = User::factory()->create();
+    $post = Post::factory()->create(['user_id' => $author->id, 'body' => 'Main post']);
+
+    $this->get("/posts/{$post->id}")
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->has('authorPosts', 0));
+});
+
+test('show page excludes reposts from author posts', function () {
+    $author = User::factory()->create();
+    $post = Post::factory()->create(['user_id' => $author->id, 'body' => 'Main post']);
+    $original = Post::factory()->create();
+    Post::factory()->create(['user_id' => $author->id, 'repost_of_id' => $original->id, 'body' => null]);
+
+    $this->get("/posts/{$post->id}")
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->has('authorPosts', 0));
+});
+
+test('show page excludes replies from author posts', function () {
+    $author = User::factory()->create();
+    $post = Post::factory()->create(['user_id' => $author->id, 'body' => 'Main post']);
+    $parent = Post::factory()->create();
+    Post::factory()->create(['user_id' => $author->id, 'parent_post_id' => $parent->id, 'body' => 'A reply']);
+
+    $this->get("/posts/{$post->id}")
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->has('authorPosts', 0));
+});
+
+test('show page includes like and reply counts in author posts', function () {
+    $author = User::factory()->create();
+    $post = Post::factory()->create(['user_id' => $author->id, 'body' => 'Main post']);
+    $other = Post::factory()->create(['user_id' => $author->id, 'body' => 'Another post']);
+
+    $this->get("/posts/{$post->id}")
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('authorPosts.0.likes_count')
+            ->has('authorPosts.0.replies_count')
+        );
+});

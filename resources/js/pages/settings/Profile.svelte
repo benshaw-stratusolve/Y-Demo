@@ -34,6 +34,7 @@
     } from '@/components/ui/dialog';
     import { send } from '@/routes/verification';
     import BanModal from '@/components/BanModal.svelte';
+    import { charCounterClass, showCharCounter } from '@/lib/char-counter';
 
     let {
         mustVerifyEmail,
@@ -44,6 +45,9 @@
     } = $props();
 
     const user = $derived(page.props.auth.user as any);
+    const BIO_MAX = 500;
+    let bioValue = $state((page.props.auth.user as any)?.bio ?? '');
+    const bioCharsLeft = $derived(BIO_MAX - bioValue.length);
 </script>
 
 <AppHead title="Profile settings" />
@@ -52,6 +56,10 @@
 <h1 class="sr-only">Profile settings</h1>
 
 <div class="flex flex-col space-y-6">
+    {#if status}
+        <div class="text-sm font-medium text-green-600 dark:text-green-400">{status}</div>
+    {/if}
+
     <AvatarUpload avatarUrl={user.avatar_url} userName={user.name} />
 
     <Heading
@@ -106,8 +114,14 @@
                     maxlength="500"
                     placeholder="Tell people a little about yourself..."
                     class="mt-1 block w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
-                >{user.bio ?? ''}</textarea>
-                <p class="text-xs text-muted-foreground">Max 500 characters</p>
+                    bind:value={bioValue}
+                ></textarea>
+                <div class="flex items-center justify-between">
+                    <p class="text-xs text-muted-foreground">Max 500 characters</p>
+                    {#if showCharCounter(bioCharsLeft)}
+                        <span class="text-xs font-semibold tabular-nums {charCounterClass(bioCharsLeft)}">{bioCharsLeft}</span>
+                    {/if}
+                </div>
                 <InputError class="mt-2" message={errors.bio} />
             </div>
 
@@ -117,12 +131,18 @@
                     id="email"
                     type="email"
                     name="email"
-                    class="mt-1 block w-full"
+                    class="mt-1 block w-full cursor-text"
                     value={user.email}
                     required
                     autocomplete="username"
                     placeholder="Email address"
+                    title="Changing your email will require re-verification"
                 />
+                {#if mustVerifyEmail}
+                    <p class="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                        <span>⚠</span> Verification pending — check your inbox to confirm your current email.
+                    </p>
+                {/if}
                 <InputError class="mt-2" message={errors.email} />
             </div>
 

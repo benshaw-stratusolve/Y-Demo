@@ -78,6 +78,7 @@
                     name="password"
                     placeholder="Password"
                     passwordrules={passwordRules}
+                    showHint={true}
                 />
                 <InputError message={errors.password} />
             </div>

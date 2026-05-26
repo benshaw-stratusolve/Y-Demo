@@ -16,6 +16,7 @@ class MessageSent implements ShouldBroadcastNow
     public function __construct(
         public Message $message,
         public int $recipientId,
+        public bool $silenced = false,
     ) {
         $message->load('sender');
     }
@@ -37,6 +38,7 @@ class MessageSent implements ShouldBroadcastNow
                 'id' => $this->message->id,
                 'conversation_id' => $this->message->conversation_id,
                 'body' => $this->message->body,
+                'image_url' => $this->message->image_url,
                 'sender_id' => $this->message->sender_id,
                 'sender' => [
                     'id' => $this->message->sender->id,
@@ -46,6 +48,7 @@ class MessageSent implements ShouldBroadcastNow
                 ],
                 'created_at' => $this->message->created_at->diffForHumans(),
                 'is_mine' => false,
+                'silenced' => $this->silenced,
             ],
         ];
     }

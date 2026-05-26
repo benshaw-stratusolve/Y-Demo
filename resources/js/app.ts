@@ -71,9 +71,11 @@ function syncRealtimeUser(props: Record<string, any>): void {
 }
 
 // Initial page load — Inertia embeds page data in the #app element's data-page attribute
-const appEl = document.getElementById('app');
-if (appEl?.dataset.page) {
-    syncRealtimeUser(JSON.parse(appEl.dataset.page).props);
+if (typeof document !== 'undefined') {
+    const appEl = document.getElementById('app');
+    if (appEl?.dataset.page) {
+        syncRealtimeUser(JSON.parse(appEl.dataset.page).props);
+    }
 }
 
 // Every subsequent Inertia navigation

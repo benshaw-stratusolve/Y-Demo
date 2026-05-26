@@ -1,4 +1,5 @@
 import { echo } from '@/lib/echo';
+import { notifications } from '@/lib/notifications.svelte';
 
 type Post = Record<string, any>;
 type Notification = {
@@ -13,6 +14,7 @@ type MessageType = {
     id: number;
     conversation_id: number;
     body: string;
+    image_url: string | null;
     sender_id: number;
     sender: { id: number; name: string; username: string; avatar_url: string | null };
     created_at: string;
@@ -51,13 +53,19 @@ function subscribeToUser(userId: number): void {
         .listen('.PostDeletedBroadcast', (e: { post_id: number }) => {
             deletedPostIds = new Set([...deletedPostIds, e.post_id]);
         })
-        .listen('.MessageSent', (e: { message: MessageType }) => {
+        .listen('.MessageSent', (e: { message: MessageType & { silenced?: boolean } }) => {
             const convId = e.message.conversation_id;
             newMessages = {
                 ...newMessages,
                 [convId]: [...(newMessages[convId] ?? []), e.message],
             };
             unreadMessagesIncrement += 1;
+            if (!e.message.silenced) {
+                const fallback = e.message.image_url ? 'Photo' : '';
+                const messagePreview = e.message.body || fallback;
+                const preview = messagePreview.length > 60 ? messagePreview.slice(0, 60) + '...' : messagePreview;
+                notifications.add({ type: 'message', title: e.message.sender.name, description: preview });
+            }
         })
         .listen('.UserTyping', (e: { conversation_id: number }) => {
             const convId = e.conversation_id;
@@ -125,7 +133,26 @@ function consumeDeletedPostIds(): Set<number> {
     return ids;
 }
 
-export const realtimeStore = {
+export interface RealtimeStore {
+    readonly newPosts: Post[];
+    readonly postCounts: Record<number, { likes_count: number; replies_count: number }>;
+    readonly liveUnreadIncrement: number;
+    readonly incomingNotifications: Notification[];
+    readonly deletedPostIds: Set<number>;
+    readonly newMessages: Record<number, MessageType[]>;
+    readonly typingConversations: Set<number>;
+    readonly unreadMessagesIncrement: number;
+    subscribeToUser(userId: number): void;
+    unsubscribeFromUser(): void;
+    consumeNewPosts(): Post[];
+    consumeIncomingNotifications(): Notification[];
+    resetUnreadIncrement(): void;
+    consumeNewMessages(conversationId: number): MessageType[];
+    resetUnreadMessagesIncrement(): void;
+    consumeDeletedPostIds(): Set<number>;
+}
+
+export const realtimeStore: RealtimeStore = {
     get newPosts() { return newPosts; },
     get postCounts() { return postCounts; },
     get liveUnreadIncrement() { return liveUnreadIncrement; },

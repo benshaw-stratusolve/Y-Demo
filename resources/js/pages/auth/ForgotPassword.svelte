@@ -58,6 +58,9 @@
                     Email password reset link
                 </Button>
             </div>
+            <p class="text-xs text-center text-muted-foreground">
+                Reset links expire after <strong>15 minutes</strong> and can only be used once.
+            </p>
         {/snippet}
     </Form>
 

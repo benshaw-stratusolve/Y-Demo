@@ -65,6 +65,7 @@
                     autocomplete="new-password"
                     placeholder="New password"
                     passwordrules={passwordRules}
+                    showHint={true}
                 />
                 <InputError message={errors.password} />
             </div>

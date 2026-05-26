@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { X, CheckCircle, Info, AlertTriangle, AlertCircle } from 'lucide-svelte';
+    import { X, CheckCircle, Info, AlertTriangle, AlertCircle, MessageSquare } from 'lucide-svelte';
     import type { AppNotification } from '@/lib/notifications.svelte';
     import { notifications } from '@/lib/notifications.svelte';
 
@@ -10,6 +10,7 @@
         info: Info,
         warning: AlertTriangle,
         error: AlertCircle,
+        message: MessageSquare,
     };
 
     const colors = {
@@ -17,10 +18,11 @@
         info: 'text-blue-400',
         warning: 'text-yellow-400',
         error: 'text-red-400',
+        message: 'text-blue-400',
     };
 
-    const Icon = $derived(icons[notification.type]);
-    const iconColor = $derived(colors[notification.type]);
+    const Icon = $derived(icons[notification.type as keyof typeof icons]);
+    const iconColor = $derived(colors[notification.type as keyof typeof colors]);
 </script>
 
 <div class="flex items-start gap-3 w-[360px] rounded-2xl border border-neutral-800 bg-neutral-950/95 backdrop-blur-sm px-4 py-3.5 shadow-2xl">

@@ -69,6 +69,31 @@ test('user can delete their account', function () {
     expect($user->fresh())->toBeNull();
 });
 
+test('bio cannot exceed 500 characters', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->patch(route('profile.update'), [
+            'name' => 'Test User',
+            'username' => 'testuser',
+            'email' => $user->email,
+            'bio' => str_repeat('a', 501),
+        ])
+        ->assertSessionHasErrors('bio');
+});
+
+test('username must be at least 3 characters', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->patch(route('profile.update'), [
+            'name' => 'Test User',
+            'username' => 'ab',
+            'email' => $user->email,
+        ])
+        ->assertSessionHasErrors('username');
+});
+
 test('correct password must be provided to delete account', function () {
     $user = User::factory()->create();
 

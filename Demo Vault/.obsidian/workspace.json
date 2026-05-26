@@ -11,10 +11,14 @@
             "id": "03cc7f224633ac69",
             "type": "leaf",
             "state": {
-              "type": "graph",
-              "state": {},
-              "icon": "lucide-git-fork",
-              "title": "Graph view"
+              "type": "markdown",
+              "state": {
+                "file": "05 - Features/FlockAI Chat (Gemini).md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "FlockAI Chat (Gemini)"
             }
           }
         ]
@@ -181,8 +185,11 @@
   },
   "active": "03cc7f224633ac69",
   "lastOpenFiles": [
-    "02 - Architecture/Laravel + Inertia + Svelte.md",
+    "Notifications (Data Model).md",
+    "06 - Backend Concepts/Eloquent Accessors + Casts.md",
+    "05 - Features/Notifications Feature.md",
     "01 - Stack Overview/00 - Index.md",
+    "02 - Architecture/Laravel + Inertia + Svelte.md",
     "04 - Data Model/Posts (replies + reposts).md",
     "04 - Data Model/Notifications.md",
     "04 - Data Model/Likes.md",
@@ -206,9 +213,6 @@
     "Untitled.base",
     "07 - Frontend Concepts/shadcn-svelte Components.md",
     "07 - Frontend Concepts/Wayfinder (Type-Safe Routes).md",
-    "07 - Frontend Concepts/Inertia Shared Props.md",
-    "07 - Frontend Concepts/Inertia Form Component.md",
-    "07 - Frontend Concepts/Svelte 5 Runes.md",
     "08 - Admin Panel (Filament)",
     "07 - Frontend Concepts",
     "06 - Backend Concepts",

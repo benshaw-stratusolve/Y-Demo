@@ -21,10 +21,20 @@ test('admin can delete a post', function () {
     $post = Post::factory()->create();
 
     Livewire::test(ListPosts::class)
-        ->callTableAction('delete', $post)
+        ->callTableAction('delete', $post, data: ['reason' => 'Violates community guidelines'])
         ->assertHasNoTableActionErrors();
 
     expect(Post::find($post->id))->toBeNull();
+});
+
+test('admin cannot delete a post without providing a reason', function () {
+    $post = Post::factory()->create();
+
+    Livewire::test(ListPosts::class)
+        ->callTableAction('delete', $post, data: [])
+        ->assertHasTableActionErrors(['reason']);
+
+    expect(Post::find($post->id))->not->toBeNull();
 });
 
 test('non-admin cannot access admin posts', function () {

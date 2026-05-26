@@ -10,6 +10,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rules\File;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -40,25 +41,14 @@ class MessagesController extends Controller
 
         $otherUser = $conversation->otherUser($user->id);
 
+        $clearedAt = $conversation->clearedAtFor($user->id);
+
         $messages = $conversation->messages()
-            ->with('sender')
+            ->with(['sender', 'reactions'])
+            ->when($clearedAt, fn ($q) => $q->where('created_at', '>', $clearedAt))
             ->orderBy('created_at')
             ->get()
-            ->map(fn (Message $msg) => [
-                'id' => $msg->id,
-                'conversation_id' => $msg->conversation_id,
-                'body' => $msg->body,
-                'sender_id' => $msg->sender_id,
-                'sender' => [
-                    'id' => $msg->sender->id,
-                    'name' => $msg->sender->name,
-                    'username' => $msg->sender->username,
-                    'avatar_url' => $msg->sender->avatar_url,
-                ],
-                'read_at' => $msg->read_at,
-                'created_at' => $msg->created_at->diffForHumans(),
-                'is_mine' => $msg->sender_id === $user->id,
-            ]);
+            ->map(fn (Message $message) => $this->messagePayload($message, $user->id));
 
         return Inertia::render('Messages', [
             'conversations' => $this->conversationsList(),
@@ -70,6 +60,7 @@ class MessagesController extends Controller
                     'username' => $otherUser->username,
                     'avatar_url' => $otherUser->avatar_url,
                 ],
+                'is_muted' => $user->hasMuted($otherUser->id),
             ],
             'messages' => $messages,
             'followingUsers' => $this->followingUsers(),
@@ -93,24 +84,38 @@ class MessagesController extends Controller
             403
         );
 
-        $request->validate(['body' => 'required|string|max:1000']);
-
-        $message = $conversation->messages()->create([
-            'sender_id' => $user->id,
-            'body' => $request->body,
+        $validated = $request->validate([
+            'body' => ['nullable', 'string', 'max:1000', 'required_without:image'],
+            'image' => ['nullable', File::image()->max(5 * 1024)],
         ]);
 
         $recipientId = $conversation->user1_id === $user->id
             ? $conversation->user2_id
             : $conversation->user1_id;
 
+        $imagePath = $request->hasFile('image')
+            ? $request->file('image')->store('message-images', 'public')
+            : null;
+
+        $message = $conversation->messages()->create([
+            'sender_id' => $user->id,
+            'body' => $validated['body'] ?? '',
+            'image_path' => $imagePath,
+        ]);
+
+        // Restore conversation visibility for both parties when a new message is sent.
+        $conversation->update(['deleted_by_user1' => false, 'deleted_by_user2' => false]);
+
+        $recipient = User::find($recipientId);
+        $silenced = $recipient->hasMuted($user->id);
+
         try {
-            broadcast(new MessageSent($message, $recipientId));
+            broadcast(new MessageSent($message, $recipientId, $silenced));
         } catch (\Throwable) {
             // Reverb unavailable — message saved, broadcast skipped
         }
 
-        return back();
+        return to_route('messages.show', $conversation);
     }
 
     public function typing(Conversation $conversation): JsonResponse
@@ -125,13 +130,48 @@ class MessagesController extends Controller
             ? $conversation->user2_id
             : $conversation->user1_id;
 
-        try {
-            broadcast(new UserTyping($conversation->id, $user->id, $recipientId));
-        } catch (\Throwable) {
-            // Reverb unavailable
+        $recipient = User::find($recipientId);
+        if (! $recipient->hasMuted($user->id)) {
+            try {
+                broadcast(new UserTyping($conversation->id, $user->id, $recipientId));
+            } catch (\Throwable) {
+                // Reverb unavailable
+            }
         }
 
         return response()->json(['ok' => true]);
+    }
+
+    public function clearChat(Conversation $conversation): RedirectResponse
+    {
+        $user = auth()->user();
+        abort_if(
+            $conversation->user1_id !== $user->id && $conversation->user2_id !== $user->id,
+            403
+        );
+
+        $conversation->clearFor($user->id);
+
+        return to_route('messages.show', $conversation);
+    }
+
+    public function destroy(Conversation $conversation): RedirectResponse
+    {
+        $user = auth()->user();
+        abort_if(
+            $conversation->user1_id !== $user->id && $conversation->user2_id !== $user->id,
+            403
+        );
+
+        $userId = $user->id;
+
+        if ($conversation->user1_id === $userId) {
+            $conversation->update(['deleted_by_user1' => true]);
+        } else {
+            $conversation->update(['deleted_by_user2' => true]);
+        }
+
+        return redirect()->route('messages.index');
     }
 
     /** @return array<int, array<string, mixed>> */
@@ -161,8 +201,13 @@ class MessagesController extends Controller
                     ->where('sender_id', '!=', $user->id)
                     ->whereNull('read_at'),
             ])
-            ->where('user1_id', $user->id)
-            ->orWhere('user2_id', $user->id)
+            ->where(function ($q) use ($user) {
+                $q->where(function ($inner) use ($user) {
+                    $inner->where('user1_id', $user->id)->where('deleted_by_user1', false);
+                })->orWhere(function ($inner) use ($user) {
+                    $inner->where('user2_id', $user->id)->where('deleted_by_user2', false);
+                });
+            })
             ->orderByDesc(
                 Message::select('created_at')
                     ->whereColumn('conversation_id', 'conversations.id')
@@ -172,6 +217,13 @@ class MessagesController extends Controller
             ->get()
             ->map(function (Conversation $conv) use ($user) {
                 $other = $conv->otherUser($user->id);
+                $clearedAt = $conv->clearedAtFor($user->id);
+                $latestMsg = $conv->latestMessage;
+
+                // Hide latest message preview if it was sent before the user cleared the chat.
+                if ($clearedAt && $latestMsg && $latestMsg->created_at?->lte($clearedAt)) {
+                    $latestMsg = null;
+                }
 
                 return [
                     'id' => $conv->id,
@@ -181,11 +233,40 @@ class MessagesController extends Controller
                         'username' => $other->username,
                         'avatar_url' => $other->avatar_url,
                     ],
-                    'latest_message' => $conv->latestMessage?->body,
-                    'latest_message_at' => $conv->latestMessage?->created_at?->diffForHumans(),
+                    'latest_message' => $latestMsg ? ($latestMsg->body !== '' ? $latestMsg->body : 'Photo') : null,
+                    'latest_message_at' => $latestMsg?->created_at?->diffForHumans(),
                     'unread_count' => $conv->unread_count,
                 ];
             })
             ->all();
+    }
+
+    /** @return array<string, mixed> */
+    private function messagePayload(Message $message, int $viewerId): array
+    {
+        return [
+            'id' => $message->id,
+            'conversation_id' => $message->conversation_id,
+            'body' => $message->body,
+            'image_url' => $message->image_url,
+            'sender_id' => $message->sender_id,
+            'sender' => [
+                'id' => $message->sender->id,
+                'name' => $message->sender->name,
+                'username' => $message->sender->username,
+                'avatar_url' => $message->sender->avatar_url,
+            ],
+            'read_at' => $message->read_at,
+            'created_at' => $message->created_at->diffForHumans(),
+            'is_mine' => $message->sender_id === $viewerId,
+            'reactions' => $message->reactions
+                ->groupBy('emoji')
+                ->map(fn ($group, $emoji) => [
+                    'emoji' => $emoji,
+                    'count' => $group->count(),
+                    'reacted' => $group->contains('user_id', $viewerId),
+                ])
+                ->values(),
+        ];
     }
 }

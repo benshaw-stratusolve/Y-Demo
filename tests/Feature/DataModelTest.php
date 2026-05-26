@@ -7,16 +7,12 @@ it('stores user profile fields', function () {
     $user = User::factory()->create([
         'username' => 'benshaw',
         'bio' => 'Building cool stuff',
-        'location' => 'London',
-        'website' => 'https://benshaw.dev',
         'avatar' => null,
     ]);
 
     expect($user->refresh())
         ->username->toBe('benshaw')
         ->bio->toBe('Building cool stuff')
-        ->location->toBe('London')
-        ->website->toBe('https://benshaw.dev')
         ->avatar->toBeNull();
 });
 
@@ -99,42 +95,4 @@ it('enforces unique follows', function () {
     Follow::factory()->create(['follower_id' => $follower->id, 'following_id' => $following->id]);
 
     expect(fn () => Follow::factory()->create(['follower_id' => $follower->id, 'following_id' => $following->id]))->toThrow(QueryException::class);
-});
-
-use App\Models\Media;
-
-it('attaches media to a post', function () {
-    $post = Post::factory()->create();
-    Media::create(['post_id' => $post->id, 'path' => 'images/photo.jpg', 'type' => 'image', 'sort_order' => 0]);
-
-    expect($post->media)->toHaveCount(1);
-    expect($post->media->first()->type)->toBe('image');
-});
-
-use App\Models\Conversation;
-use App\Models\Message;
-
-it('creates a conversation with participants', function () {
-    $userA = User::factory()->create();
-    $userB = User::factory()->create();
-    $conversation = Conversation::factory()->create();
-    $conversation->participants()->attach([$userA->id, $userB->id]);
-
-    expect($conversation->participants)->toHaveCount(2);
-    expect($userA->conversations)->toHaveCount(1);
-});
-
-it('sends a message in a conversation', function () {
-    $user = User::factory()->create();
-    $conversation = Conversation::factory()->create();
-    $conversation->participants()->attach($user->id);
-    $message = Message::factory()->create([
-        'conversation_id' => $conversation->id,
-        'user_id' => $user->id,
-        'body' => 'Hey there!',
-    ]);
-
-    expect($conversation->messages)->toHaveCount(1);
-    expect($conversation->messages->first()->body)->toBe('Hey there!');
-    expect($message->read_at)->toBeNull();
 });

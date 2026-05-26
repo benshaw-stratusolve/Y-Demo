@@ -4,7 +4,7 @@
     import { Input } from '@/components/ui/input';
     import { cn } from '@/lib/utils';
 
-    let { class: className = '', ...rest } = $props();
+    let { class: className = '', showHint = false, ...rest } = $props();
 
     let showPassword = $state(false);
 </script>
@@ -28,4 +28,7 @@
             <Eye class="size-4" />
         {/if}
     </button>
+    {#if showHint}
+        <p class="text-xs text-neutral-500 mt-1">Min. 8 characters with a letter, number &amp; special character.</p>
+    {/if}
 </div>

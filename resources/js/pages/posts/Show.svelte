@@ -2,33 +2,100 @@
 
     import AppHead from '@/components/AppHead.svelte';
     import { destroy as logout } from '@/actions/Laravel/Fortify/Http/Controllers/AuthenticatedSessionController';
-    import AnimatedThemeToggler from '@/components/animated-theme-toggler/AnimatedThemeToggler.svelte';
     import { Home, Search, Bell, Sparkles, User, Shield } from 'lucide-svelte';
+    import HeaderToggles from '@/components/HeaderToggles.svelte';
     import SearchOverlay from '@/components/search-overlay/SearchOverlay.svelte';
     import AnimatedNotificationList from '@/components/animated-notification/AnimatedNotificationList.svelte';
     import AnimatedGradientText from '@/components/AnimatedGradientText.svelte';
     import UserAvatar from '@/components/UserAvatar.svelte';
     import { Badge } from '@/components/ui/badge';
-    import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationPrevious, PaginationNext, PaginationEllipsis } from '@/components/ui/pagination';
     import CoolMode from '@/components/magic/cool-mode/cool-mode.svelte';
+    import { untrack } from 'svelte';
     import { notifications } from '@/lib/notifications.svelte';
     import { page, router } from '@inertiajs/svelte';
     import { destroy as destroyPost, like as likePost, reply as replyToPost } from '@/actions/App/Http/Controllers/PostController';
     import BanModal from '@/components/BanModal.svelte';
+    import { charCounterClass, showCharCounter } from '@/lib/char-counter';
+    import { animatePostOut } from '@/lib/anime-utils';
 
-    let { post, isFollowing = false, authorPosts = [] }: { post: any; isFollowing: boolean; authorPosts: any[] } = $props();
+    let { post, replies, isFollowing = false, authorPosts = [] }: {
+        post: any;
+        replies: { data: any[]; current_page: number; last_page: number };
+        isFollowing: boolean;
+        authorPosts: any[];
+    } = $props();
+
+    let localAuthorPosts = $state<any[]>([...authorPosts]);
+
+    $effect(() => {
+        localAuthorPosts = [...authorPosts];
+    });
+
     let openMenuId = $state<number | null>(null);
     let showAuthorPosts = $state(false);
     let replyText = $state('');
     let replyError = $state<string | null>(null);
     let submittingReply = $state(false);
+    const MAX_CHARS = 280;
+    const replyCharsLeft = $derived(MAX_CHARS - replyText.length);
     let composerOpen = $state(false);
+    let composerEl = $state<HTMLElement | null>(null);
     let searchOpen = $state(false);
-    const AUTHOR_PER_PAGE = 5;
-    let authorPostsPage = $state(1);
-    const visibleAuthorPosts = $derived(
-        authorPosts.slice((authorPostsPage - 1) * AUTHOR_PER_PAGE, authorPostsPage * AUTHOR_PER_PAGE)
-    );
+
+    // ── Infinite scroll for replies ──────────────────────────────────────────
+    let allReplies = $state<any[]>([...replies.data]);
+    let scrollPage = $state(1);
+    let hasMore = $state(replies.last_page > 1);
+
+    // Sync allReplies when replies prop updates. Read allReplies via untrack() to
+    // avoid a circular dependency (reading + writing the same $state in one effect
+    // hits Svelte 5's update depth limit and kills all click handlers).
+    $effect(() => {
+        const serverIds = new Set(replies.data.map((r: any) => r.id));
+        const pending = untrack(() => allReplies.filter((r: any) => r.optimistic && !serverIds.has(r.id)));
+        allReplies = [...pending, ...replies.data];
+    });
+
+    $effect(() => {
+        if (composerOpen && composerEl) {
+            composerEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    });
+
+    let loadingMore = $state(false);
+    let sentinel = $state<HTMLElement | null>(null);
+
+    $effect(() => {
+        if (!sentinel) return;
+        const obs = new IntersectionObserver(
+            ([entry]) => { if (entry.isIntersecting) loadMore(); },
+            { rootMargin: '400px' }
+        );
+        obs.observe(sentinel);
+        return () => obs.disconnect();
+    });
+
+    async function loadMore() {
+        if (loadingMore || !hasMore) return;
+        loadingMore = true;
+        const nextPage = scrollPage + 1;
+        try {
+            const res = await fetch(`/posts/${post.id}/replies.json?page=${nextPage}`, {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            if (!res.ok) throw new Error('fetch failed');
+            const result = await res.json();
+            const ids = new Set(allReplies.map((r: any) => r.id));
+            allReplies = [...allReplies, ...result.data.filter((r: any) => !ids.has(r.id))];
+            scrollPage = result.current_page;
+            hasMore = result.current_page < result.last_page;
+        } catch {
+            // silently ignore
+        } finally {
+            loadingMore = false;
+        }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     const auth = $derived(page.props.auth as any);
     const unreadCount = $derived((page.props as any).unread_notifications_count as number ?? 0);
@@ -44,27 +111,33 @@
         if (!replyText.trim() || submittingReply) { return; }
         submittingReply = true;
         replyError = null;
-        router.post(replyToPost(post.id).url, { body: replyText }, {
+        const body = replyText;
+        router.post(replyToPost(post.id).url, { body }, {
             preserveScroll: true,
+            only: ['post'],
             onSuccess: () => {
+                // Prepend optimistically — the Inertia reload refreshes post.replies_count
+                allReplies = [{ id: Date.now(), optimistic: true, body, user: auth?.user, created_at: new Date().toISOString() }, ...allReplies];
                 replyText = '';
                 replyError = null;
                 composerOpen = false;
                 notifications.add({ type: 'success', title: 'Comment posted!', description: 'Your comment has been added.' });
             },
-            onError: (errors: Record<string, string>) => { replyError = errors.body ?? null; },
+            onError: (errors: Record<string, string>) => { replyError = errors.body ?? errors.reply_limit ?? null; },
             onFinish: () => { submittingReply = false; },
         });
     }
 
     function deleteReply(id: number) {
         openMenuId = null;
-        router.delete(destroyPost(id).url, {
+        const el = document.getElementById(`reply-${id}`);
+        const doDelete = () => router.delete(destroyPost(id).url, {
             preserveScroll: true,
             onSuccess: () => {
                 notifications.add({ type: 'info', title: 'Comment deleted', description: 'Your comment has been removed.' });
             },
         });
+        if (el) { animatePostOut(el, doDelete); } else { doDelete(); }
     }
 
 </script>
@@ -79,7 +152,6 @@
             <a href="/dashboard" class="p-5 rounded-full w-fit transition-colors" aria-label="Home">
                 <img src="/images/Y-dark-remove.png" alt="Y" class="h-9 w-9 object-contain dark:invert-0 invert" />
             </a>
-            <AnimatedThemeToggler class="p-3 rounded-full transition-colors text-gray-900 dark:text-white" />
         </div>
 
         <nav class="flex flex-col gap-1 w-full mt-2">
@@ -183,7 +255,9 @@
                 preserveScroll: true,
                 preserveState: true,
             })}
-                class="bg-gray-900 dark:bg-white text-white dark:text-black font-bold rounded-full px-4 py-1.5 text-sm">
+                class="font-bold rounded-full px-4 py-1.5 text-sm transition-colors {isFollowing
+                    ? 'bg-gray-900 dark:bg-white text-white dark:text-black border border-transparent hover:bg-red-600 dark:hover:bg-red-600 hover:text-white dark:hover:text-white hover:border-red-600'
+                    : 'bg-gray-900 dark:bg-white text-white dark:text-black'}">
                 {isFollowing ? 'Following' : 'Follow'}
             </button>
         {/if}
@@ -224,7 +298,7 @@
     </div>
     <!-- Comment composer -->
     {#if composerOpen}
-        <div class="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800">
+        <div bind:this={composerEl} class="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800">
             <textarea
                 bind:value={replyText}
                 placeholder="Post your comment"
@@ -236,10 +310,15 @@
             {#if replyError}
                 <p class="text-red-500 text-sm mt-1">{replyError}</p>
             {/if}
-            <div class="flex justify-end mt-2">
+            <div class="flex items-center justify-end gap-3 mt-2">
+                {#if showCharCounter(replyCharsLeft)}
+                    <span class="text-xs font-semibold tabular-nums {charCounterClass(replyCharsLeft)}">
+                        {replyCharsLeft}
+                    </span>
+                {/if}
                 <button
                     onclick={submitReply}
-                    disabled={!replyText.trim() || submittingReply}
+                    disabled={!replyText.trim() || submittingReply || replyCharsLeft < 0}
                     class="bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-full py-1.5 px-4 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {submittingReply ? 'Posting…' : 'Comment'}
@@ -248,14 +327,14 @@
         </div>
     {/if}
 
-    {#each post.replies as reply}
-        <div class="relative flex gap-3 px-4 py-3 border-b border-neutral-200 dark:border-neutral-800">
+    {#each allReplies as reply}
+        <div id="reply-{reply.id}" class="relative flex gap-3 px-4 py-3 border-b border-neutral-200 dark:border-neutral-800">
             <UserAvatar user={reply.user} size="xs" />
             <div class="flex-1 min-w-0">
                 <p class="font-bold text-sm">{reply.user.name} <span class="text-neutral-500 font-normal">@{reply.user.username}</span></p>
                 <p class="text-sm mt-1">{reply.body}</p>
             </div>
-            {#if reply.user.id === auth?.user?.id}
+            {#if reply.user.id === auth?.user?.id && !reply.optimistic}
                 <div class="absolute top-3 right-3">
                     <button
                         type="button"
@@ -279,8 +358,22 @@
         </div>
     {/each}
 
+    <!-- Infinite scroll sentinel -->
+    <div bind:this={sentinel} class="h-1"></div>
+    {#if loadingMore}
+        <div class="py-6 flex justify-center">
+            <div class="flex gap-1.5">
+                <span class="w-2 h-2 bg-neutral-400 dark:bg-neutral-600 rounded-full animate-bounce" style="animation-delay:0ms"></span>
+                <span class="w-2 h-2 bg-neutral-400 dark:bg-neutral-600 rounded-full animate-bounce" style="animation-delay:150ms"></span>
+                <span class="w-2 h-2 bg-neutral-400 dark:bg-neutral-600 rounded-full animate-bounce" style="animation-delay:300ms"></span>
+            </div>
+        </div>
+    {:else if !hasMore && allReplies.length > 0}
+        <p class="py-4 text-center text-neutral-400 text-sm">All comments loaded ✓</p>
+    {/if}
+
     <!-- Author posts toggle -->
-    {#if authorPosts.length > 0}
+    {#if localAuthorPosts.length > 0}
         <button
             onclick={() => showAuthorPosts = !showAuthorPosts}
             class="w-full px-4 py-4 text-blue-500 font-semibold text-sm hover:bg-neutral-50 dark:hover:bg-neutral-950 transition-colors text-left border-b border-neutral-200 dark:border-neutral-800"
@@ -288,10 +381,10 @@
             {showAuthorPosts ? '↑ Reduce' : `↓ Show more posts by ${post.user.name}`}
         </button>
         {#if showAuthorPosts}
-            {#each visibleAuthorPosts as ap}
+            {#each localAuthorPosts as ap}
                 <a
                     href="/posts/{ap.id}"
-                    class="flex flex-col gap-1 px-4 py-4 border-b border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-950 transition-colors"
+                    class="flex flex-col gap-1 px-4 py-4 border-b border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-950 transition-colors text-gray-900 dark:text-gray-100"
                 >
                     <p class="text-[15px]">{ap.body}</p>
                     <div class="flex gap-5 text-neutral-500 text-[13px] mt-2">
@@ -300,29 +393,17 @@
                     </div>
                 </a>
             {/each}
-            {#if authorPosts.length > AUTHOR_PER_PAGE}
-                <div class="py-4">
-                    <Pagination count={authorPosts.length} perPage={AUTHOR_PER_PAGE} bind:page={authorPostsPage}>
-                        {#snippet children({ pages, currentPage: cp })}
-                            <PaginationContent>
-                                <PaginationItem><PaginationPrevious /></PaginationItem>
-                                {#each pages as pg (pg.key)}
-                                    {#if pg.type === 'ellipsis'}
-                                        <PaginationItem><PaginationEllipsis /></PaginationItem>
-                                    {:else}
-                                        <PaginationItem><PaginationLink page={pg} isActive={cp === pg.value} /></PaginationItem>
-                                    {/if}
-                                {/each}
-                                <PaginationItem><PaginationNext /></PaginationItem>
-                            </PaginationContent>
-                        {/snippet}
-                    </Pagination>
-                </div>
-            {/if}
         {/if}
     {/if}
 
     </main>
+
+    <!-- Right toggles -->
+    <div class="hidden lg:block pt-3 pl-4">
+        <div class="sticky top-3">
+            <HeaderToggles />
+        </div>
+    </div>
 </div>
 
 <SearchOverlay bind:open={searchOpen} />

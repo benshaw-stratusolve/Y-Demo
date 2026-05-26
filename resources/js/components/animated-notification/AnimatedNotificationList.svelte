@@ -4,12 +4,14 @@
     import { notifications } from '@/lib/notifications.svelte';
     import NotificationItem from './NotificationItem.svelte';
 
+    let { position = 'bottom' }: { position?: 'top' | 'bottom' } = $props();
+
     let mounted = $state(false);
     onMount(() => { mounted = true; });
 </script>
 
 {#if mounted}
-    <div class="fixed bottom-6 right-6 z-[200] flex flex-col-reverse gap-3 pointer-events-none">
+    <div class="fixed {position === 'top' ? 'top-6' : 'bottom-6'} right-6 z-[200] flex {position === 'top' ? 'flex-col' : 'flex-col-reverse'} gap-3 pointer-events-none">
         <AnimatePresence>
             {#each notifications.items as notification (notification.id)}
                 <motion.div

@@ -4,8 +4,10 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FlockAIController;
 use App\Http\Controllers\FollowController;
 use App\Http\Controllers\MessagesController;
+use App\Http\Controllers\MuteController;
 use App\Http\Controllers\NotificationsController;
 use App\Http\Controllers\PostController;
+use App\Http\Controllers\ReactionsController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
@@ -36,6 +38,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('messages/{conversation}', [MessagesController::class, 'show'])->name('messages.show');
     Route::post('messages/{conversation}', [MessagesController::class, 'store'])->name('messages.store');
     Route::post('messages/{conversation}/typing', [MessagesController::class, 'typing'])->name('messages.typing');
+    Route::delete('messages/{conversation}', [MessagesController::class, 'destroy'])->name('messages.destroy');
+    Route::post('messages/{conversation}/clear', [MessagesController::class, 'clearChat'])->name('messages.clear');
     Route::post('conversations/with/{user}', [MessagesController::class, 'findOrCreate'])->name('conversations.find-or-create');
     Route::get('notifications', [NotificationsController::class, 'index'])->name('notifications');
     Route::get('flock-ai', [FlockAIController::class, 'index'])->name('flock-ai');
@@ -48,6 +52,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('users/{user}', [UserController::class, 'show'])->name('users.show');
     Route::get('users/{user}/posts.json', [UserController::class, 'postsJson'])->name('users.posts.json');
     Route::post('users/{user}/follow', [FollowController::class, 'toggle'])->name('users.follow');
+    Route::post('users/{user}/mute', [MuteController::class, 'toggle'])->name('users.mute');
+    Route::post('messages/{message}/react', [ReactionsController::class, 'toggle'])->name('messages.react');
     Route::get('dashboard/posts.json', [DashboardController::class, 'postsJson'])->name('dashboard.posts.json');
     Route::get('search', [SearchController::class, 'index'])->name('search');
 });

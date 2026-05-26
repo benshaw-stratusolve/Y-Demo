@@ -1,5 +1,17 @@
 import type { AppNotification } from '@/lib/notifications.svelte';
 
+const STORAGE_KEY = 'notification-sound-enabled';
+
+export function isSoundEnabled(): boolean {
+    if (typeof localStorage === 'undefined') return true;
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored === null ? true : stored === 'true';
+}
+
+export function setSoundEnabled(enabled: boolean): void {
+    localStorage.setItem(STORAGE_KEY, String(enabled));
+}
+
 const soundMap: Record<AppNotification['type'], string> = {
     success: '/sounds/success-noti.wav',
     info: '/sounds/success-noti.wav',
@@ -21,6 +33,7 @@ function getAudio(src: string): HTMLAudioElement {
 
 export function playNotificationSound(type: AppNotification['type']): void {
     if (typeof window === 'undefined' || typeof Audio === 'undefined') return;
+    if (!isSoundEnabled()) return;
     try {
         const src = soundMap[type];
         const audio = getAudio(src);

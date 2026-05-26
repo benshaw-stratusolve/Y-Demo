@@ -1,7 +1,7 @@
 <?php
 
 use App\Models\User;
-use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Cache;
 
 test('login screen can be rendered', function () {
     $response = $this->get(route('login'));
@@ -42,15 +42,17 @@ test('users can logout', function () {
     $this->assertGuest();
 });
 
-test('users are rate limited', function () {
+test('users are rate limited after too many failed attempts', function () {
     $user = User::factory()->create();
 
-    RateLimiter::increment(md5('login'.implode('|', [$user->email, '127.0.0.1'])), amount: 5);
+    // Simulate an active lockout via the ProgressiveLoginThrottle cache key
+    $key = strtolower(trim($user->email)).'|127.0.0.1';
+    Cache::put("lk:{$key}", now()->addMinute()->timestamp, now()->addMinute());
 
     $response = $this->post(route('login.store'), [
         'email' => $user->email,
         'password' => 'wrong-password',
     ]);
 
-    $response->assertTooManyRequests();
+    $response->assertRedirect()->assertSessionHasErrors('email');
 });

@@ -1,12 +1,12 @@
 # Notifications Feature
 
-> The Notifications page — how database notifications are fetched, enriched, displayed, and kept fresh with polling.
+> The Notifications page — how database notifications are fetched, enriched, displayed, and kept live with WebSockets.
 
 ---
 
 ## Concept Explained
 
-The Notifications page reads from Laravel's `notifications` table, enriches each row with live actor data (name, avatar, follow status), then renders them in Svelte. Because `toArray()` only stores an `actor_id` (not the actor's name/avatar — those change), the controller re-fetches actor data fresh on every load. Inertia's `usePoll` keeps the list current without WebSockets.
+The Notifications page reads from Laravel's `notifications` table, enriches each row with live actor data (name, avatar, follow status), then renders them in Svelte. Because `toArray()` only stores an `actor_id` (not the actor's name/avatar — those change), the controller re-fetches actor data fresh on every load. New notifications are pushed in real-time via Laravel Reverb and prepended to the list without a page refresh.
 
 ---
 
@@ -37,16 +37,33 @@ $actors = User::whereIn('id', $actorIds)
 
 Each notification is then mapped, injecting `actor_name` and `actor_avatar` from the in-memory collection — zero N+1.
 
-### Frontend polling
+### Real-time delivery via Reverb
+
+Polling has been replaced with WebSocket push. When a notification is created server-side, the `BroadcastsNotification` trait broadcasts a `.NotificationSent` event to the user's private channel. The frontend prepends it instantly:
 
 ```ts
 // resources/js/pages/Notifications.svelte
-import { page, router, usePoll } from '@inertiajs/svelte';
-
-usePoll(30000, { only: ['notifications', 'unread_count'] });
+$effect(() => {
+    const incoming = realtimeStore.incomingNotifications;
+    if (incoming.length > 0) {
+        untrack(() => {
+            allNotifications = [...realtimeStore.consumeIncomingNotifications(), ...allNotifications];
+        });
+    }
+});
 ```
 
-Every 30 seconds, Inertia fires a partial reload that re-runs only the notification fetching logic. When the tab is in the background, Inertia throttles this to ~90% reduction automatically.
+The component holds notifications in `allNotifications` (local `$state`) rather than reading directly from the Inertia prop. This lets real-time notifications be prepended without a server round-trip.
+
+### Bell badge reset
+
+Visiting `/notifications` resets the live unread increment in the realtime store:
+
+```ts
+$effect(() => {
+    untrack(() => realtimeStore.resetUnreadIncrement());
+});
+```
 
 ### Follow-back status
 
@@ -89,13 +106,14 @@ $notifications = $rawNotifications->map(function ($n) use ($actors, $alreadyFoll
 
 ## Why This Approach
 
-Storing only `actor_id` in notification data (not the actor's name/avatar) is intentional — if a user changes their avatar, old notifications automatically show their current avatar because it's fetched fresh. The bulk actor fetch avoids N+1 queries. Polling at 30s is a pragmatic choice — the correct long-term solution is WebSockets (Laravel Echo + Reverb), but polling requires zero extra infrastructure.
+Storing only `actor_id` in notification data (not the actor's name/avatar) is intentional — if a user changes their avatar, old notifications automatically show their current avatar because it's fetched fresh. The bulk actor fetch avoids N+1 queries. WebSocket push via Reverb delivers notifications instantly and eliminates the 30-second polling delay.
 
 ---
 
 ## Related Notes
 
 - [[Laravel Notifications]]
-- [[Notifications (Data Model)]]
+- [[Laravel Reverb (WebSockets)]]
+- [[Real-Time Store (realtime.svelte.ts)]]
 - [[Shared Data (Inertia Middleware)]]
 - [[Prefetching + Polling]]

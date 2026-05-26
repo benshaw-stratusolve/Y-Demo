@@ -12,7 +12,14 @@ class Conversation extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user1_id', 'user2_id'];
+    protected $fillable = ['user1_id', 'user2_id', 'deleted_by_user1', 'deleted_by_user2', 'user1_cleared_at', 'user2_cleared_at'];
+
+    protected $casts = [
+        'deleted_by_user1' => 'boolean',
+        'deleted_by_user2' => 'boolean',
+        'user1_cleared_at' => 'datetime',
+        'user2_cleared_at' => 'datetime',
+    ];
 
     public function user1(): BelongsTo
     {
@@ -45,6 +52,20 @@ class Conversation extends Model
             ->where('sender_id', '!=', $userId)
             ->whereNull('read_at')
             ->count();
+    }
+
+    public function clearFor(int $userId): void
+    {
+        if ($this->user1_id === $userId) {
+            $this->update(['user1_cleared_at' => now()]);
+        } else {
+            $this->update(['user2_cleared_at' => now()]);
+        }
+    }
+
+    public function clearedAtFor(int $userId): mixed
+    {
+        return $this->user1_id === $userId ? $this->user1_cleared_at : $this->user2_cleared_at;
     }
 
     public static function findOrCreateBetween(int $userIdA, int $userIdB): self

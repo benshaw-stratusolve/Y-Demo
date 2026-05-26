@@ -4,7 +4,7 @@
     import { fade, fly } from 'svelte/transition';
     import { Home, Bell, Sparkles, User, Send, ChevronDown } from 'lucide-svelte';
     import AnimatedGradientText from '@/components/AnimatedGradientText.svelte';
-    import AnimatedThemeToggler from '@/components/animated-theme-toggler/AnimatedThemeToggler.svelte';
+    import HeaderToggles from '@/components/HeaderToggles.svelte';
     import AnimatedGridPattern from '@/components/animated-grid-pattern/AnimatedGridPattern.svelte';
     import CardContainer from '@/components/3d-card/CardContainer.svelte';
     import CardBody from '@/components/3d-card/CardBody.svelte';
@@ -74,6 +74,7 @@
                     history: priorMessages.map(m => ({ role: m.role, content: m.content })),
                 }),
             });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
             messages = [...messages, { id: Date.now() + 1, role: 'assistant', content: data.message }];
         } catch {
@@ -105,6 +106,21 @@
     ];
 
     const logoSrc = $derived(isDark ? '/images/flock_white.png' : '/images/flock_black.png');
+
+    function renderMarkdown(text: string): string {
+        return text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.+?)\*/g, '<em>$1</em>')
+            .replace(/`(.+?)`/g, '<code class="bg-white/10 px-1 rounded text-sm font-mono">$1</code>')
+            .replace(/^### (.+)$/gm, '<h3 class="font-bold text-base mt-2">$1</h3>')
+            .replace(/^## (.+)$/gm, '<h2 class="font-bold text-lg mt-3">$1</h2>')
+            .replace(/^# (.+)$/gm, '<h1 class="font-bold text-xl mt-3">$1</h1>')
+            .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
+            .replace(/\n/g, '<br>');
+    }
 </script>
 
 <svelte:head>
@@ -145,7 +161,7 @@
                     class="h-7 w-7 object-contain {isDark ? '' : 'invert'}"
                 />
             </a>
-            <AnimatedThemeToggler class="p-2 rounded-full transition-colors {isDark ? 'text-white' : 'text-gray-900'}" />
+            <HeaderToggles />
         </header>
 
         <!-- Hero content -->
@@ -289,7 +305,11 @@
                                     : isDark
                                         ? 'bg-white/8 text-white/90 border border-white/10 rounded-tl-sm'
                                         : 'bg-white text-gray-800 border border-gray-200 rounded-tl-sm shadow-sm'}">
-                                {msg.content}
+                                {#if msg.role === 'assistant'}
+                                    {@html renderMarkdown(msg.content)}
+                                {:else}
+                                    {msg.content}
+                                {/if}
                             </div>
                         </div>
                     </div>

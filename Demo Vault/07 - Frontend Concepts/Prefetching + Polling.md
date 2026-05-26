@@ -39,17 +39,17 @@ The settings tab links (Profile, Security, Appearance) also prefetch:
 </Link>
 ```
 
-### Polling — `resources/js/pages/Notifications.svelte`
+### Polling — replaced by Reverb
+
+Polling (`usePoll`) was previously used on the Dashboard and Notifications pages:
 
 ```ts
-import { page, router, usePoll } from '@inertiajs/svelte';
-
+// Removed — no longer used
 usePoll(30000, { only: ['notifications', 'unread_count'] });
+usePoll(30000, { only: ['posts'] });
 ```
 
-Every 30 seconds, Inertia fires `GET /notifications` with header `X-Inertia-Partial-Data: notifications,unread_count`. The server re-runs only the notification query and returns just those two props — not a full page response. When the browser tab is in the background, the interval is automatically throttled by 90% (effectively ~5 minutes).
-
-`usePoll` automatically stops when the component unmounts (user navigates away).
+Both have been replaced by Laravel Reverb WebSocket push. Notifications now arrive instantly via the `.NotificationSent` event; new posts appear in the Dashboard feed via `.PostBroadcast`. Polling fired requests every 30 seconds even when nothing had changed — WebSocket push only sends data when something actually happens.
 
 ---
 
@@ -72,7 +72,7 @@ cacheFor={['30s', '1m']}  // stale-while-revalidate: serve stale for up to 1m, r
 
 **Prefetch placement:** The sidebar (NavMain) and settings tabs are always visible and have a small number of fixed routes — perfect candidates. Prefetching post links or user profile links would be wasteful: there are many of them, they're data-heavy, and the data changes frequently.
 
-**Poll placement:** Notifications is the one page where users sit and actively wait for updates. Dashboard doesn't poll because auto-refreshing a paginated feed resets scroll position — better UX is a "new posts" banner (not yet implemented). For a production app, WebSockets (Laravel Echo + Reverb) would replace polling for real-time push — polling works but fires requests even when nothing has changed.
+**Polling replaced by WebSockets:** Polling is easy to set up but fires requests even when nothing has changed. With Reverb, data is pushed only when an event actually occurs — more efficient and genuinely real-time (zero delay, not up-to-30-second delay).
 
 ---
 
@@ -80,5 +80,7 @@ cacheFor={['30s', '1m']}  // stale-while-revalidate: serve stale for up to 1m, r
 
 - [[Request Lifecycle]]
 - [[Notifications Feature]]
+- [[Laravel Reverb (WebSockets)]]
+- [[Real-Time Store (realtime.svelte.ts)]]
 - [[Inertia Shared Props]]
 - [[Laravel + Inertia + Svelte]]

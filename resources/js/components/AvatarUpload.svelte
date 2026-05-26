@@ -88,22 +88,29 @@
 <div class="flex items-center gap-6">
     <!-- Avatar circle -->
     <div class="relative shrink-0">
-        <div class="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center {displayUrl ? '' : avatarBg}">
-            {#if displayUrl}
-                <img src={displayUrl} alt={userName} class="w-full h-full object-cover" />
-            {:else}
-                <span class="text-xl font-bold text-white">{initials}</span>
-            {/if}
-        </div>
-        <!-- Camera badge -->
         <button
             type="button"
             onclick={() => fileInput?.click()}
-            class="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-neutral-900 dark:bg-white border-2 border-white dark:border-black flex items-center justify-center hover:bg-neutral-700 dark:hover:bg-neutral-200 transition-colors"
+            class="relative w-20 h-20 rounded-full overflow-hidden group cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             aria-label="Change photo"
+            title="Click to change your profile photo"
         >
-            <Camera class="w-3.5 h-3.5 text-white dark:text-black" />
+            <div class="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center {displayUrl ? '' : avatarBg}">
+                {#if displayUrl}
+                    <img src={displayUrl} alt={userName} class="w-full h-full object-cover" />
+                {:else}
+                    <span class="text-xl font-bold text-white">{initials}</span>
+                {/if}
+            </div>
+            <!-- Hover overlay -->
+            <div class="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <Camera class="w-6 h-6 text-white" />
+            </div>
         </button>
+        <!-- Camera badge -->
+        <div class="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-neutral-900 dark:bg-white border-2 border-white dark:border-black flex items-center justify-center pointer-events-none">
+            <Camera class="w-3.5 h-3.5 text-white dark:text-black" />
+        </div>
     </div>
 
     <!-- Actions -->
